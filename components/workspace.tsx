@@ -1,31 +1,30 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { diffJson } from "@/lib/odf/diff";
-import { buildEndpoint, buildMatchSlug } from "@/lib/odf/record";
-import type { FootballRecord } from "@/lib/odf/record";
-import type { MatchSummary } from "@/lib/odf/types";
+import { buildEndpoint } from "@/lib/odf/record";
 
 import { CompareResultModal } from "./workspace/compare-result-modal";
+import { useCompare } from "./workspace/hooks/use-compare";
+import { useDismissOnEscape } from "./workspace/hooks/use-dismiss-on-escape";
+import { useExportJson } from "./workspace/hooks/use-export-json";
+import { useMatchDetails } from "./workspace/hooks/use-match-details";
+import { useMatchRun } from "./workspace/hooks/use-match-run";
+import { useResizableSplit } from "./workspace/hooks/use-resizable-split";
+import { useTimers } from "./workspace/hooks/use-timers";
+import { useToast } from "./workspace/hooks/use-toast";
 import { MatchInspectorPanel } from "./workspace/match-inspector-panel";
 import type { InspectorTab } from "./workspace/match-inspector-panel";
 import { MatchListPanel } from "./workspace/match-list-panel";
 import { RunControls } from "./workspace/run-controls";
 import { RunProgress } from "./workspace/run-progress";
 import { Toast } from "./workspace/toast";
-import type { CompareResultEntry, DetailEntry, ExportScope, Phase, SortState } from "./workspace/types";
+import type { SortState } from "./workspace/types";
 import { phaseProgress, STAGE_ORDER, toRow } from "./workspace/utils";
 import { WorkspaceFooter } from "./workspace/workspace-footer";
 
 export function Workspace({ brand }: { brand: ReactNode }) {
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [summaries, setSummaries] = useState<MatchSummary[]>([]);
-  const [details, setDetails] = useState<Map<string, DetailEntry>>(new Map());
-  const detailRequests = useRef(new Map<string, Promise<FootballRecord>>());
-
   const [gender, setGender] = useState("All");
   const [stage, setStage] = useState("All stages");
   const [team, setTeam] = useState("All teams");
@@ -34,125 +33,45 @@ export function Workspace({ brand }: { brand: ReactNode }) {
 
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [inspector, setInspector] = useState<InspectorTab>("endpoint");
-  const [toast, setToast] = useState("");
   // Defaults to wherever this app is actually being served from (works on localhost in dev and on
   // whatever domain it's deployed to) instead of a placeholder domain that never resolves. Safe as
   // a lazy initializer (no effect needed): this field only renders once data is loaded and a match
   // is selected, long after the initial server-rendered/hydrated paint, so there's no mismatch risk.
   const [baseUrl, setBaseUrl] = useState(() => (typeof window === "undefined" ? "" : window.location.origin));
-  const [exporting, setExporting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [compareResults, setCompareResults] = useState<Map<string, CompareResultEntry>>(new Map());
-  const [comparing, setComparing] = useState(false);
-  const [compareOpen, setCompareOpen] = useState(false);
-  const [compareResultModalOpen, setCompareResultModalOpen] = useState(false);
-  const [leftWidth, setLeftWidth] = useState(58);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const activeFilterCount = [gender !== "All", stage !== "All stages", team !== "All teams"].filter(Boolean).length;
 
-  const timers = useRef<number[]>([]);
-  const splitRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
+  useDismissOnEscape(sheetOpen, setSheetOpen);
+  useDismissOnEscape(filtersOpen, setFiltersOpen);
+  useDismissOnEscape(menuOpen, setMenuOpen);
 
-  useEffect(() => () => timers.current.forEach((id) => window.clearTimeout(id)), []);
+  const { leftWidth, splitRef, startResize } = useResizableSplit(58);
+  const { schedule, clearAll } = useTimers();
+  const { toast, notify } = useToast(schedule);
+  const { details, ensureDetail, retryDetail, resetDetails } = useMatchDetails();
 
-  useEffect(() => {
-    if (!sheetOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setSheetOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sheetOpen]);
-
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [filtersOpen]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [menuOpen]);
-
-  useEffect(() => {
-    if (!compareResultModalOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setCompareResultModalOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [compareResultModalOpen]);
-
-  useEffect(() => {
-    const onMove = (event: MouseEvent) => {
-      if (!dragging.current || !splitRef.current) return;
-      const rect = splitRef.current.getBoundingClientRect();
-      const min = rect.width * 0.28;
-      const max = rect.width * 0.72;
-      const x = Math.max(min, Math.min(event.clientX - rect.left, max));
-      setLeftWidth((x / rect.width) * 100);
-    };
-    const onUp = () => { dragging.current = false; };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
-
-  const notify = (message: string) => {
-    setToast(message);
-    timers.current.push(window.setTimeout(() => setToast(""), 2200));
-  };
-
-  const clearTimers = () => {
-    timers.current.forEach((id) => window.clearTimeout(id));
-    timers.current = [];
-  };
-
-  const run = async () => {
-    clearTimers();
-    setDetails(new Map());
-    detailRequests.current.clear();
-    setSelectedId(undefined);
-    setPhase("loading");
-    try {
-      const response = await fetch("/api/generate", { method: "POST" });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        const message = body && typeof body === "object" && "error" in body ? String(body.error) : undefined;
-        throw new Error(message ?? `Generate failed (${response.status})`);
-      }
-      const { matches } = body as { matches: MatchSummary[] };
-      setPhase("generating");
-      setSummaries(matches);
-      timers.current.push(window.setTimeout(() => setPhase("complete"), 250));
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "The Olympic schedule could not be loaded.");
-      setPhase("error");
-    }
-  };
-
-  const reset = async () => {
-    clearTimers();
-    setPhase("idle");
-    setSummaries([]);
-    setDetails(new Map());
-    detailRequests.current.clear();
-    setSelectedId(undefined);
-    setGender("All"); setStage("All stages"); setTeam("All teams"); setQuery(""); setSort({ field: "kickoff", dir: "asc" });
-    setExportOpen(false);
-    try {
-      await fetch("/api/generate", { method: "DELETE" });
-      notify("Run reset — server cache cleared");
-    } catch {
-      notify("Run reset (server cache clear failed — will still refresh on next generate)");
-    }
-  };
+  const { phase, errorMessage, summaries, run, reset } = useMatchRun({
+    schedule,
+    clearAll,
+    notify,
+    onBeforeRun: () => {
+      resetDetails();
+      setSelectedId(undefined);
+    },
+    onReset: () => {
+      resetDetails();
+      setSelectedId(undefined);
+      setGender("All");
+      setStage("All stages");
+      setTeam("All teams");
+      setQuery("");
+      setSort({ field: "kickoff", dir: "asc" });
+      setExportOpen(false);
+    },
+  });
 
   const rows = useMemo(() => summaries.map(toRow), [summaries]);
   const summaryById = useMemo(() => new Map(summaries.map((summary) => [summary.id, summary])), [summaries]);
@@ -198,42 +117,32 @@ export function Workspace({ brand }: { brand: ReactNode }) {
   const detailEntry = selectedSummary ? details.get(selectedSummary.id) : undefined;
   const selectedReady = detailEntry?.status === "ready";
 
-  const ensureDetail = useCallback((summary: MatchSummary): Promise<FootballRecord> => {
-    const cached = detailRequests.current.get(summary.id);
-    if (cached) return cached;
-    setDetails((prev) => new Map(prev).set(summary.id, { status: "loading" }));
-    const request = fetch(`/api/matches/${encodeURIComponent(summary.id)}`)
-      .then(async (response) => {
-        const body: unknown = await response.json();
-        if (!response.ok) {
-          const message = body && typeof body === "object" && "error" in body ? String(body.error) : undefined;
-          throw new Error(message ?? `Match detail request failed (${response.status})`);
-        }
-        return body as FootballRecord;
-      })
-      .then((record) => {
-        setDetails((prev) => new Map(prev).set(summary.id, { status: "ready", record }));
-        return record;
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Failed to load match detail.";
-        setDetails((prev) => new Map(prev).set(summary.id, { status: "error", message }));
-        detailRequests.current.delete(summary.id);
-        throw error;
-      });
-    detailRequests.current.set(summary.id, request);
-    return request;
-  }, []);
-
-  const retryDetail = (summary: MatchSummary) => {
-    detailRequests.current.delete(summary.id);
-    ensureDetail(summary).catch(() => {});
-  };
-
   useEffect(() => {
     if (!selectedSummary) return;
     ensureDetail(selectedSummary).catch(() => {});
   }, [selectedSummary, ensureDetail]);
+
+  const { exporting, exportJson } = useExportJson({
+    rows,
+    filtered,
+    selected,
+    summaryById,
+    ensureDetail,
+    notify,
+    onDone: () => setExportOpen(false),
+  });
+
+  const {
+    compareResults,
+    comparing,
+    compareOpen,
+    setCompareOpen,
+    compareResultModalOpen,
+    setCompareResultModalOpen,
+    runCompare,
+    comparePasted,
+    compareSummary,
+  } = useCompare({ rows, filtered, selected, baseUrl, notify });
 
   const copy = async (text: string, message: string) => {
     try {
@@ -242,126 +151,6 @@ export function Workspace({ brand }: { brand: ReactNode }) {
     } catch {
       notify("Copy blocked by browser");
     }
-  };
-
-  const exportJson = async (scope: ExportScope) => {
-    const targetRows = scope === "all" ? rows : scope === "filtered" ? filtered : selected ? [selected] : [];
-    const targets = targetRows
-      .map((row) => summaryById.get(row.id))
-      .filter((summary): summary is MatchSummary => Boolean(summary));
-
-    setExportOpen(false);
-    if (!targets.length) return;
-
-    setExporting(true);
-    try {
-      const records = await Promise.all(targets.map((summary) => ensureDetail(summary)));
-      let blob: Blob;
-      let filename: string;
-      if (scope === "one") {
-        blob = new Blob([JSON.stringify(records[0], null, 2)], { type: "application/json" });
-        filename = targets[0] ? `${buildMatchSlug(targets[0])}.json` : "footyscores-paris2024-one.json";
-      } else {
-        const { default: JSZip } = await import("jszip");
-        const zip = new JSZip();
-        targets.forEach((summary, index) => {
-          zip.file(`${buildMatchSlug(summary)}.json`, JSON.stringify(records[index], null, 2));
-        });
-        blob = await zip.generateAsync({ type: "blob" });
-        filename = `footyscores-paris2024-${scope}.zip`;
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      notify(`Exported ${records.length} record${records.length === 1 ? "" : "s"} as ${scope === "one" ? "JSON" : "a zip of JSON files"}`);
-    } catch {
-      notify("Export failed — one or more matches could not be loaded");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const runCompare = async (scope: ExportScope) => {
-    const targetRows = scope === "all" ? rows : scope === "filtered" ? filtered : selected ? [selected] : [];
-    const matchIds = targetRows.map((row) => row.id);
-
-    setCompareOpen(false);
-    if (!matchIds.length) return;
-    if (!baseUrl.trim()) {
-      notify("Enter a test API base URL first");
-      return;
-    }
-
-    setComparing(true);
-    try {
-      const response = await fetch("/api/compare", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseUrl, matchIds }),
-      });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        const message = body && typeof body === "object" && "error" in body ? String(body.error) : undefined;
-        throw new Error(message ?? `Compare failed (${response.status})`);
-      }
-      const { results } = body as {
-        results: ({ matchId: string } & CompareResultEntry)[];
-      };
-      setCompareResults((prev) => {
-        const next = new Map(prev);
-        for (const { matchId, ...result } of results) next.set(matchId, result);
-        return next;
-      });
-      // Only for a single-match run — bulk (all/filtered) stays as the header summary badge, a
-      // modal popping up once per match compared wouldn't make sense there.
-      if (scope === "one") setCompareResultModalOpen(true);
-      const passed = results.filter((result) => result.status === "pass").length;
-      notify(`Compared ${results.length}: ${passed} passed, ${results.length - passed} failed`);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Comparison failed");
-    } finally {
-      setComparing(false);
-    }
-  };
-
-  // Client-side only, no server round-trip — unlike runCompare, there's nothing to fetch: the
-  // "actual" side is whatever the user pasted, and the "expected" side (the selected match's
-  // record) is already sitting in `details` from whenever this match was opened/loaded, and
-  // already went through a real JSON.stringify/parse over the wire (via /api/matches/[id]), so it
-  // doesn't need the undefined-vs-absent-key normalization the server-side compare route does.
-  const comparePasted = (rawText: string) => {
-    if (!selectedSummary || detailEntry?.status !== "ready") {
-      notify("Select a match with loaded detail first");
-      return;
-    }
-
-    let actual: unknown;
-    try {
-      actual = JSON.parse(rawText);
-    } catch {
-      notify("Pasted text is not valid JSON");
-      return;
-    }
-
-    const diffs = diffJson(detailEntry.record, actual);
-    setCompareResults((prev) => new Map(prev).set(selectedSummary.id, diffs.length === 0 ? { status: "pass" } : { status: "fail", diffs }));
-    setCompareResultModalOpen(true);
-    notify(diffs.length === 0 ? "Pasted JSON matches the generated reference" : `Pasted JSON differs in ${diffs.length} place${diffs.length === 1 ? "" : "s"}`);
-  };
-
-  const compareSummary = useMemo(() => {
-    if (compareResults.size === 0) return null;
-    let passed = 0;
-    for (const result of compareResults.values()) if (result.status === "pass") passed += 1;
-    return { total: compareResults.size, passed };
-  }, [compareResults]);
-
-  const startResize = (event: React.MouseEvent) => {
-    event.preventDefault();
-    dragging.current = true;
   };
 
   const selectRow = (id: string) => {
@@ -459,7 +248,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
               compareResult={selected ? compareResults.get(selected.id) : undefined}
               comparing={comparing}
               onCompareSelected={() => runCompare("one")}
-              onComparePasted={comparePasted}
+              onComparePasted={(text) => comparePasted(selectedSummary, detailEntry, text)}
               rows={rows}
               filtered={filtered}
               dataReady={dataReady}

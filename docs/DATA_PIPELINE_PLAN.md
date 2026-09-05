@@ -201,6 +201,43 @@ reference endpoint → self-compare) confirmed the reference endpoint returns ex
 `competition, kickoff, lineups, score, scorers, status, teams, venue` and `POST /api/compare` still
 reports `pass` using the new `buildEndpoint(summary)` lookup.
 
+### Update: `Workspace`'s state logic extracted into hooks
+
+`components/workspace.tsx` had already been split into presentational subcomponents, but the state
+logic behind them — run/reset, per-match detail caching, export, compare, plus a handful of small
+UI concerns (drag-to-resize, escape-to-dismiss, toast) — was still one ~490-line component. Server
+Components + Suspense don't fit here: every fetch (`/api/generate`, `/api/matches/[id]`,
+`/api/compare`) is triggered by a button click or a selection change, not by initial render, so
+there's no render-time data dependency for Suspense to hang off — this needed custom hooks, not RSC.
+
+Extracted into `components/workspace/hooks/`:
+
+- **`useDismissOnEscape(open, onOpenChange)`** — collapsed four near-identical
+  open/Escape-listener effects (sheet/filters/menu/compare-modal) into one hook called four times.
+  Takes the raw `useState` setter directly (not an inline closure) so the effect doesn't re-attach
+  its listener every render.
+- **`useResizableSplit(initialLeftWidth)`** — the drag-to-resize `leftWidth`/`splitRef`/`dragging`
+  logic.
+- **`useTimers()`** — the managed-setTimeout bag, shared by `useToast` (dismiss) and `useMatchRun`
+  (the delayed "generating" → "complete" phase transition), preserving the original behavior that a
+  fresh run/reset cancels any stale pending timer of either kind.
+- **`useToast(schedule)`** — `toast` state + `notify`.
+- **`useMatchDetails()`** — `details` map, in-flight request de-dup, `ensureDetail`/`retryDetail`.
+- **`useMatchRun({ schedule, clearAll, notify, onBeforeRun, onReset })`** — `phase`/`summaries`/
+  `errorMessage` plus `run`/`reset`; the two callbacks let it stay decoupled from knowing about
+  details/filters/selection specifics while still triggering the right resets at the right point.
+- **`useExportJson({ ..., ensureDetail, notify, onDone })`** and **`useCompare({ ... })`** — the two
+  largest async handlers, each with their own local state (`exporting`; `compareResults`/
+  `comparing`/`compareOpen`/`compareResultModalOpen`).
+
+`Workspace` itself dropped from ~490 lines to ~275, now mostly hook composition + JSX. Each hook got
+its own co-located test (`renderHook` from Testing Library, `vi.stubGlobal("fetch", ...)` for the
+network-boundary ones) — 38 new tests, taking the suite to 166. One lint snag hit along the way:
+`react-hooks/refs` flagged a test harness that forwarded a hook's whole return object and accessed
+`.splitRef`/`.startResize` on it inline in JSX — fixed by destructuring at the call site instead
+(`const { splitRef, startResize } = useResizableSplit(...)`), matching how `Workspace` itself already
+consumed the hook.
+
 ## Context
 
 `components/workspace.tsx` is a fully built UI (loading/filtering/generating phases, filters, sort,
