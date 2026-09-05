@@ -267,6 +267,28 @@ Added `lib/server/records.test.ts` (didn't exist before) with a regression test 
 callers share one in-flight fetch, `clearCache` forces a re-fetch, a genuine fetch failure still
 propagates and caches nothing). 10 new tests, suite at 178.
 
+### Update: fixed the reset toast getting stuck forever
+
+Reported: click Reset, see "Run reset — server cache cleared," and it never disappears. Root cause
+was the `useTimers()` hook introduced during the hook-extraction pass above: `useToast`'s 2200ms
+dismiss timer and `useMatchRun`'s 250ms "generating" → "complete" phase-transition timer shared one
+timer bag so that a fresh run/reset could cancel the *other* purpose's stale timer too — preserving
+the pre-extraction code's incidental behavior on purpose at the time. That behavior turned out to be
+a real bug: clicking **Load & generate** shortly after **Reset** (a completely natural next action,
+well within the toast's 2200ms window) calls `run()`'s `clearAll()`, which cancels the still-pending
+dismiss timer for the "Run reset…" toast — and since `run()` never itself calls `notify(...)` to
+replace or clear that text, it stays on screen indefinitely. Reproduced directly: rendering the real
+`Workspace`, clicking Reset, advancing a fake clock by 500ms, clicking Load & generate, then
+advancing another 3000ms still showed the stale toast text.
+
+Fixed by giving each hook its own private timer instead of sharing one: `useToast` now manages its
+own `dismissTimer` ref internally (no `schedule` param), and `useMatchRun` manages its own
+`completeTimer` ref for just the phase transition (no `schedule`/`clearAll` params). `useTimers()`
+itself is now unused and deleted, along with its test file. Rewrote `use-toast.test.ts` and
+`use-match-run.test.ts` for the new self-contained signatures, including a regression test proving a
+second `run()`/a `reset()` still correctly cancels its *own* leftover phase-transition timer without
+needing anything shared.
+
 ## Context
 
 `components/workspace.tsx` is a fully built UI (loading/filtering/generating phases, filters, sort,

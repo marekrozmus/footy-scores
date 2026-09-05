@@ -12,7 +12,6 @@ import { useExportJson } from "./workspace/hooks/use-export-json";
 import { useMatchDetails } from "./workspace/hooks/use-match-details";
 import { useMatchRun } from "./workspace/hooks/use-match-run";
 import { useResizableSplit } from "./workspace/hooks/use-resizable-split";
-import { useTimers } from "./workspace/hooks/use-timers";
 import { useToast } from "./workspace/hooks/use-toast";
 import { MatchInspectorPanel } from "./workspace/match-inspector-panel";
 import type { InspectorTab } from "./workspace/match-inspector-panel";
@@ -49,13 +48,10 @@ export function Workspace({ brand }: { brand: ReactNode }) {
   useDismissOnEscape(menuOpen, setMenuOpen);
 
   const { leftWidth, splitRef, startResize } = useResizableSplit(58);
-  const { schedule, clearAll } = useTimers();
-  const { toast, notify } = useToast(schedule);
+  const { toast, notify } = useToast();
   const { details, ensureDetail, retryDetail, resetDetails } = useMatchDetails();
 
   const { phase, errorMessage, summaries, run, reset } = useMatchRun({
-    schedule,
-    clearAll,
     notify,
     onBeforeRun: () => {
       resetDetails();
