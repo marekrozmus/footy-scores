@@ -22,9 +22,11 @@ npm run test:watch # run the unit test suite in watch mode
 ```
 
 Tests cover `lib/odf/*` and `lib/server/*` — the ODF parsing, endpoint/record
-generation, diffing, and cache logic. Network-boundary modules
-(`schedule.ts`, `matchDetail.ts`) are tested with `fetch` mocked to a small
-realistic fixture rather than hitting the real Olympic API. Route handlers
-under `app/api/**`/`app/v1/**` and the React components aren't covered yet —
+generation, diffing, and cache logic — plus the presentational components
+under `components/workspace/*` (Testing Library + jsdom). Network-boundary
+modules (`schedule.ts`, `matchDetail.ts`) are tested with `fetch` mocked to a
+small realistic fixture rather than hitting the real Olympic API.
+`components/workspace.tsx` (the stateful orchestrator, owns the real `fetch`
+calls) and route handlers under `app/api/**`/`app/v1/**` aren't covered —
 see `.claude/skills/vitest-best-practices/SKILL.md` for the reasoning and
 conventions.
