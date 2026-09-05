@@ -256,15 +256,27 @@ export function Workspace({ brand }: { brand: ReactNode }) {
     setExporting(true);
     try {
       const records = await Promise.all(targets.map((summary) => ensureDetail(summary)));
-      const payload = scope === "one" ? records[0] : records;
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      let blob: Blob;
+      let filename: string;
+      if (scope === "one") {
+        blob = new Blob([JSON.stringify(records[0], null, 2)], { type: "application/json" });
+        filename = targets[0] ? `${buildMatchSlug(targets[0])}.json` : "footyscores-paris2024-one.json";
+      } else {
+        const { default: JSZip } = await import("jszip");
+        const zip = new JSZip();
+        targets.forEach((summary, index) => {
+          zip.file(`${buildMatchSlug(summary)}.json`, JSON.stringify(records[index], null, 2));
+        });
+        blob = await zip.generateAsync({ type: "blob" });
+        filename = `footyscores-paris2024-${scope}.zip`;
+      }
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = scope === "one" && targets[0] ? `${buildMatchSlug(targets[0])}.json` : `footyscores-paris2024-${scope}.json`;
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      notify(`Exported ${records.length} record${records.length === 1 ? "" : "s"} as JSON`);
+      notify(`Exported ${records.length} record${records.length === 1 ? "" : "s"} as ${scope === "one" ? "JSON" : "a zip of JSON files"}`);
     } catch {
       notify("Export failed — one or more matches could not be loaded");
     } finally {
