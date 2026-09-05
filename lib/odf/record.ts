@@ -78,12 +78,16 @@ export function buildRecord(summary: MatchSummary, detail: MatchDetail): Footbal
       away: detail.fullTime.away,
       halfTime: detail.halfTime,
     },
+    // Optional fields (stoppage/assist) are spread in only when present, never assigned
+    // `undefined` — see the matching comment in matchDetail.ts's toScorers for why that distinction
+    // matters (an object with a key explicitly set to undefined isn't the same as one without that
+    // key at all once JSON is involved).
     scorers: detail.scorers.map((scorer) => ({
       team: scorer.team === "home" ? summary.home.name : summary.away.name,
       player: scorer.player,
       minute: scorer.minute,
-      stoppage: scorer.stoppage,
-      assist: scorer.assist,
+      ...(scorer.stoppage !== undefined ? { stoppage: scorer.stoppage } : {}),
+      ...(scorer.assist !== undefined ? { assist: scorer.assist } : {}),
       type: scorer.type,
     })),
     lineups: detail.lineups,

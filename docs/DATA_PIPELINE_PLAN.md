@@ -96,6 +96,45 @@ back in the body for a human browsing this in a tab. Verified live: default body
 `competition, kickoff, lineups, score, scorers, status, teams, venue` with `X-Match-Meta` present in
 headers; `?meta=true` adds `meta` back into the body too.
 
+### Update: bulk comparison against a real FootyScores deployment
+
+The single-match Compare tab was a stub ("not implemented yet"). Built it for real, plus a bulk
+mode, since bulk compare is meaningless without actual diff logic behind it:
+
+- **`lib/odf/diff.ts`** — `diffJson(expected, actual)`, a structural JSON diff (missing/extra/changed
+  per field path). Arrays are compared by index, not content-matched — a reordering-only difference
+  in an array of objects shows up as per-index changes rather than "same items, different order";
+  a known limitation, not a bug. Verified with 9 hand-written cases (identical, changed primitive,
+  missing/extra key, array length mismatch in both directions, null-vs-object, nested change) run
+  directly with `node --experimental-strip-types`, all passing.
+- **`POST /api/compare`** (`{ baseUrl, matchIds }` → `{ results }`) — runs **server-side**
+  deliberately, so the tested API being reachable from this server (not the QA engineer's browser)
+  is what matters, regardless of whether that API has CORS enabled for wherever this tool is hosted.
+  Concurrency-capped at 6 (`lib/server/concurrency.ts`), 8s timeout per match. Compares the strict
+  (no-`meta`) shape against whatever JSON the tested API returns for that match's endpoint;
+  `getOrGenerateRecord` (`lib/server/records.ts`, factored out of `/api/matches/[id]` so both routes
+  share it) fills in any match that hasn't been generated yet.
+- **UI**: a "Compare" dropdown next to Export JSON (all/filtered/selected match, mirroring the
+  export scope options) triggers a bulk run; a header badge shows `{passed}/{total} compared`. The
+  per-match inspector's Compare tab now shows the real result for that match (pass / fail with a
+  field-by-field diff table / error), with its own single-match "Compare this match" button.
+
+**Bug found and fixed during verification.** First live test: compared every match against this
+app's *own* `/v1/football/matches/[slug]` endpoint (same data on both sides — should be a guaranteed
+pass, so a genuinely useful check of the compare *mechanism* itself). Got real failures instead, all
+on `scorers[].stoppage`/`scorers[].assist` — optional fields. Root cause: `toScorers()` in
+`matchDetail.ts` and the scorers mapping in `buildRecord()` (`record.ts`) built those objects with
+`stoppage`/`assist` explicitly set to the value `undefined` when absent, rather than omitting the
+key. `JSON.stringify` drops `undefined`-valued keys, so the real HTTP response (`actual`, always
+`fetch().json()`) correctly lacks the key — but the in-memory `expected` object used directly inside
+`/api/compare` (never round-tripped through JSON) still had it, present-with-undefined. `diffJson`'s
+`Object.hasOwn` check saw that asymmetry as a real "missing" field. Fixed both ways: the object
+construction now spreads those fields in conditionally instead of assigning `undefined`
+(`...(stoppage !== undefined ? { stoppage } : {})`), and `/api/compare` additionally round-trips
+`expected` through `JSON.parse(JSON.stringify(...))` as a defensive normalization, so both sides of
+every comparison are judged purely as JSON values. Re-verified live: all 58 matches now report
+`pass` comparing against the app's own endpoint.
+
 ## Context
 
 `components/workspace.tsx` is a fully built UI (loading/filtering/generating phases, filters, sort,

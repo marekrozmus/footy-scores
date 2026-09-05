@@ -90,12 +90,17 @@ function toScorers(response: OdfMatchDetailResponse, homeCode: string): Scorer[]
         const assist = competitor.athletes.find((athlete) => athlete.pbpat_role === "ASSIST");
         const { minute, stoppage } = parseMinute(action.pbpa_When);
 
+        // Optional fields are omitted entirely when absent, not set to `undefined` — so this object
+        // has exactly the same shape whether it's used in-memory or round-tripped through JSON
+        // (JSON.stringify drops undefined-valued keys but can't distinguish "omitted" from
+        // "explicitly undefined" on the way in, so building it right the first time avoids a whole
+        // class of false-positive diffs when this gets compared against a real JSON API response).
         scorers.push({
           team: competitor.pbpc_code === homeCode ? "home" : "away",
           player: athleteName(items, competitor.pbpc_code, scorer.pbpat_bib),
           minute,
-          stoppage,
-          assist: assist ? athleteName(items, competitor.pbpc_code, assist.pbpat_bib) : undefined,
+          ...(stoppage !== undefined ? { stoppage } : {}),
+          ...(assist ? { assist: athleteName(items, competitor.pbpc_code, assist.pbpat_bib) } : {}),
           type: GOAL_TYPE_BY_ACTION[action.pbpa_Action] ?? "other",
         });
       }

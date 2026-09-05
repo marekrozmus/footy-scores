@@ -21,6 +21,7 @@ import {
   ChevronRight,
   X,
 } from "@/components/icons";
+import type { DiffEntry } from "@/lib/odf/diff";
 import { NOC_TO_ISO2 } from "@/lib/odf/flags";
 import { buildEndpoint } from "@/lib/odf/record";
 import type { FootballRecord } from "@/lib/odf/record";
@@ -48,6 +49,11 @@ type MatchRow = {
 };
 
 type DetailEntry = { status: "loading" } | { status: "ready"; record: FootballRecord } | { status: "error"; message: string };
+
+type CompareResultEntry =
+  | { status: "pass" }
+  | { status: "fail"; diffs: DiffEntry[] }
+  | { status: "error"; message: string };
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -174,6 +180,9 @@ export function Workspace() {
   const [baseUrl, setBaseUrl] = useState(() => (typeof window === "undefined" ? "" : window.location.origin));
   const [exporting, setExporting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [compareResults, setCompareResults] = useState<Map<string, CompareResultEntry>>(new Map());
+  const [comparing, setComparing] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(58);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -395,6 +404,57 @@ export function Workspace() {
     }
   };
 
+  const runCompare = async (scope: "all" | "filtered" | "one") => {
+    const targetRows = scope === "all" ? rows : scope === "filtered" ? filtered : selected ? [selected] : [];
+    const matchIds = targetRows.map((row) => row.id);
+
+    if (!matchIds.length) {
+      setCompareOpen(false);
+      return;
+    }
+    if (!baseUrl.trim()) {
+      notify("Enter a test API base URL first");
+      setCompareOpen(false);
+      return;
+    }
+
+    setComparing(true);
+    try {
+      const response = await fetch("/api/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl, matchIds }),
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        const message = body && typeof body === "object" && "error" in body ? String(body.error) : undefined;
+        throw new Error(message ?? `Compare failed (${response.status})`);
+      }
+      const { results } = body as {
+        results: ({ matchId: string } & CompareResultEntry)[];
+      };
+      setCompareResults((prev) => {
+        const next = new Map(prev);
+        for (const { matchId, ...result } of results) next.set(matchId, result);
+        return next;
+      });
+      const passed = results.filter((result) => result.status === "pass").length;
+      notify(`Compared ${results.length}: ${passed} passed, ${results.length - passed} failed`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Comparison failed");
+    } finally {
+      setComparing(false);
+      setCompareOpen(false);
+    }
+  };
+
+  const compareSummary = useMemo(() => {
+    if (compareResults.size === 0) return null;
+    let passed = 0;
+    for (const result of compareResults.values()) if (result.status === "pass") passed += 1;
+    return { total: compareResults.size, passed };
+  }, [compareResults]);
+
   const startResize = (event: React.MouseEvent) => {
     event.preventDefault();
     dragging.current = true;
@@ -464,6 +524,7 @@ export function Workspace() {
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span><b className="text-foreground">{dataReady ? rows.length : 0}</b> matches</span>
                       <span><b className="text-signal-green">{dataReady ? rows.length : 0}</b> generated</span>
+                      {compareSummary && <span><b className={compareSummary.passed === compareSummary.total ? "text-signal-green" : "text-signal-red"}>{compareSummary.passed}</b>/<b>{compareSummary.total}</b> compared</span>}
                       <span>· {sort.field} {sort.dir}</span>
                     </div>
                   </div>
@@ -590,8 +651,12 @@ export function Workspace() {
               </div></div>
               <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 md:hidden">
                 <p className="min-w-0 truncate text-xs text-muted-foreground">{filtered.length} of {dataReady ? rows.length : 0} records · {sort.field} {sort.dir}</p>
-                <div className="relative shrink-0">
-                  <Button variant="console" size="sm" className="min-h-11 text-xs" onClick={() => setExportOpen(!exportOpen)} aria-expanded={exportOpen} disabled={!dataReady || exporting}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />}{exporting ? "Exporting…" : "Export JSON"}<ChevronDown /></Button>
+                <div className="relative flex shrink-0 items-center gap-2">
+                  <Button variant="consoleOutline" size="sm" className="min-h-11 text-xs" onClick={() => { setExportOpen(false); setCompareOpen(!compareOpen); }} aria-expanded={compareOpen} disabled={!dataReady || comparing}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Compare"}<ChevronDown /></Button>
+                  {compareOpen && <div className="absolute bottom-full right-0 z-30 mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+                    {([["all", `All ${rows.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => runCompare(scope)} className="block w-full cursor-pointer px-3 py-3 text-left text-sm hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
+                  </div>}
+                  <Button variant="console" size="sm" className="min-h-11 text-xs" onClick={() => { setCompareOpen(false); setExportOpen(!exportOpen); }} aria-expanded={exportOpen} disabled={!dataReady || exporting}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />}{exporting ? "Exporting…" : "Export JSON"}<ChevronDown /></Button>
                   {exportOpen && <div className="absolute bottom-full right-0 z-30 mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
                     {([["all", `All ${rows.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => exportJson(scope)} className="block w-full cursor-pointer px-3 py-3 text-left text-sm hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
                   </div>}
@@ -699,19 +764,56 @@ export function Workspace() {
                         <GitCompareArrows className="mt-0.5 size-5 text-signal-gold" />
                         <div>
                           <h3 className="font-display text-sm font-bold uppercase">Automated JSON comparison</h3>
-                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Compare the generated reference with the response from the tested FootyScores API.</p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Compare the generated reference (strict example.json shape, no meta) with the response from the tested FootyScores API. Runs server-side, so the tested API doesn&apos;t need CORS enabled for this app&apos;s origin.</p>
                         </div>
                       </div>
                       <label className="mt-4 block text-xs uppercase tracking-14 text-muted-foreground">
                         Test API base URL
                         <input className="mt-2 min-h-10 w-full rounded-md border border-border bg-panel px-3 text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
                       </label>
-                      <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" disabled><GitCompareArrows />Run comparison</Button>
+                      <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" onClick={() => runCompare("one")} disabled={comparing}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Compare this match"}</Button>
+                      <p className="mt-2 text-xs text-muted-foreground">Need every match at once? Use the <b className="text-foreground">Compare</b> button next to Export JSON instead.</p>
                     </div>
-                    <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground">
-                      <AlertTriangle className="size-5 shrink-0 text-signal-gold" />
-                      <span>Not implemented yet. This bonus feature — fetching the base URL above and diffing it against the generated reference — is planned but out of scope for this pass. Use Export JSON to get reference payloads for manual or scripted comparison in the meantime.</span>
-                    </div>
+                    {(() => {
+                      const result = compareResults.get(selected.id);
+                      if (!result) {
+                        return (
+                          <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground">
+                            <AlertTriangle className="size-5 shrink-0 text-signal-gold" />
+                            <span>Comparison has not run for this match yet.</span>
+                          </div>
+                        );
+                      }
+                      if (result.status === "error") {
+                        return (
+                          <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-red/30 bg-signal-red/5 p-3 text-xs text-signal-red">
+                            <AlertTriangle className="size-5 shrink-0" />
+                            <span className="break-all">{result.message}</span>
+                          </div>
+                        );
+                      }
+                      if (result.status === "pass") {
+                        return (
+                          <div className="mt-3 flex items-center gap-2 rounded-md border border-signal-green/30 bg-signal-green/5 p-3 text-xs text-signal-green">
+                            <Check className="size-4 shrink-0" />
+                            <span>Exact match — the tested API&apos;s response matches the generated reference.</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="mt-3 overflow-hidden rounded-md border border-border">
+                          <div className="grid grid-compare-row gap-2 border-b border-border bg-panel px-3 py-2.5 text-xs uppercase tracking-widest text-muted-foreground"><span>Field</span><span>Expected</span><span>Actual</span></div>
+                          {result.diffs.map((diff) => (
+                            <div key={diff.path} className="grid grid-compare-row gap-2 border-b border-border bg-signal-red/5 px-3 py-2.5 text-xs last:border-0">
+                              <span className="break-all text-muted-foreground">{diff.path}</span>
+                              <span className="break-all">{diff.kind === "extra" ? "—" : JSON.stringify(diff.expected)}</span>
+                              <span className="break-all text-signal-red">{diff.kind === "missing" ? "—" : JSON.stringify(diff.actual)}</span>
+                            </div>
+                          ))}
+                          <p className="bg-panel px-3 py-2.5 text-xs text-muted-foreground">{result.diffs.length} difference{result.diffs.length === 1 ? "" : "s"}</p>
+                        </div>
+                      );
+                    })()}
                   </div>}
                 </>
               )}
@@ -722,8 +824,12 @@ export function Workspace() {
                   <p className="text-xs uppercase tracking-14 text-muted-foreground">Export run</p>
                   <p className="mt-0.5 text-xs">{filtered.length} of {dataReady ? rows.length : 0} records · JSON · {sort.field} {sort.dir}</p>
                 </div>
-                <div className="relative">
-                  <Button variant="console" size="sm" className="min-h-10 text-xs" onClick={() => setExportOpen(!exportOpen)} aria-expanded={exportOpen} disabled={!dataReady || exporting}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />}{exporting ? "Exporting…" : "Export JSON"}<ChevronDown /></Button>
+                <div className="relative flex items-center gap-2">
+                  <Button variant="consoleOutline" size="sm" className="min-h-10 text-xs" onClick={() => { setExportOpen(false); setCompareOpen(!compareOpen); }} aria-expanded={compareOpen} disabled={!dataReady || comparing}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Compare"}<ChevronDown /></Button>
+                  {compareOpen && <div className="absolute bottom-full right-0 z-10 mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+                    {([["all", `All ${rows.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => runCompare(scope)} className="block w-full px-3 py-3 text-left text-xs hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
+                  </div>}
+                  <Button variant="console" size="sm" className="min-h-10 text-xs" onClick={() => { setCompareOpen(false); setExportOpen(!exportOpen); }} aria-expanded={exportOpen} disabled={!dataReady || exporting}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />}{exporting ? "Exporting…" : "Export JSON"}<ChevronDown /></Button>
                   {exportOpen && <div className="absolute bottom-full right-0 z-10 mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
                     {([["all", `All ${rows.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => exportJson(scope)} className="block w-full px-3 py-3 text-left text-xs hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
                   </div>}
