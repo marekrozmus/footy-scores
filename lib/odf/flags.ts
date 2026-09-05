@@ -1,0 +1,27 @@
+// IOC NOC code -> ISO 3166-1 alpha-2, for every nation that played Olympic football at Paris 2024
+// (the two code systems diverge for several of these, e.g. GER/DE, NGR/NG, PAR/PY, ZAM/ZM).
+export const NOC_TO_ISO2: Record<string, string> = {
+  ARG: "ar",
+  AUS: "au",
+  BRA: "br",
+  CAN: "ca",
+  COL: "co",
+  DOM: "do",
+  EGY: "eg",
+  ESP: "es",
+  FRA: "fr",
+  GER: "de",
+  GUI: "gn",
+  IRQ: "iq",
+  ISR: "il",
+  JPN: "jp",
+  MAR: "ma",
+  MLI: "ml",
+  NGR: "ng",
+  NZL: "nz",
+  PAR: "py",
+  UKR: "ua",
+  USA: "us",
+  UZB: "uz",
+  ZAM: "zm",
+};

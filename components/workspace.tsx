@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
 import {
@@ -21,95 +21,86 @@ import {
   ChevronRight,
   X,
 } from "@/components/icons";
+import { NOC_TO_ISO2 } from "@/lib/odf/flags";
+import { buildEndpoint } from "@/lib/odf/record";
+import type { FootballRecord } from "@/lib/odf/record";
+import type { MatchSummary } from "@/lib/odf/types";
 
-type Player = { name: string; number: number; position: string };
-
-type Squad = { coach: string; formation: string; startingXI: Player[]; bench: Player[] };
-
-type Scorer = { player: string; team: "home" | "away"; minute: number; type: "goal" | "penalty" | "own-goal" };
-
-type Match = {
+type MatchRow = {
   id: string;
   iso: string;
-  kickoffLocal: string;
   date: string;
   time: string;
   home: string;
+  homeNoc: string;
   away: string;
+  awayNoc: string;
+  homeGoals: number | null;
+  awayGoals: number | null;
   score: string;
-  homeGoals: number;
-  awayGoals: number;
-  halfTime: { home: number; away: number };
   stage: string;
   round: string;
   gender: "Men" | "Women";
   venue: string;
   city: string;
-  attendance: number;
-  referee: string;
-  statusCode: "FT" | "AET" | "PEN";
-  scorers: Scorer[];
+  scheduleStatus: string;
+  sourceUrl: string;
 };
 
-const positions = ["GK", "RB", "CB", "CB", "LB", "DM", "CM", "AM", "RW", "ST", "LW"];
+type DetailEntry = { status: "loading" } | { status: "ready"; record: FootballRecord } | { status: "error"; message: string };
 
-const squadNames: Record<string, string[]> = {
-  Argentina: ["Gerónimo Rulli", "Marco Di Cesare", "Nicolás Otamendi", "Bruno Amione", "Julio Soler", "Ezequiel Fernández", "Kevin Zenón", "Thiago Almada", "Claudio Echeverri", "Julián Álvarez", "Giuliano Simeone"],
-  Morocco: ["Munir Mohamedi", "Achraf Hakimi", "Jawad El Yamiq", "Mehdi Boukamir", "Zakaria El Ouahdi", "Oussama Targhalline", "Bilal El Khannouss", "Amir Richardson", "Eliesse Ben Seghir", "Soufiane Rahimi", "Ilias Akhomach"],
-  Uzbekistan: ["Abduvohid Nematov", "Abdukodir Khusanov", "Umar Eshmurodov", "Husniddin Alikulov", "Diyor Kholmatov", "Abbosbek Fayzullaev", "Jasurbek Jaloliddinov", "Ruslanbek Jiyanov", "Khusayin Norchaev", "Alibek Davronov", "Ulugbek Khoshimov"],
-  Spain: ["Arnau Tenas", "Juan Miranda", "Pau Cubarsí", "Eric García", "Marc Pubill", "Álex Baena", "Sergio Gómez", "Fermín López", "Juanlu Sánchez", "Abel Ruiz", "Samu Omorodion"],
-  France: ["Guillaume Restes", "Kiliann Sildillia", "Castello Lukeba", "Chrislain Matsima", "Adrien Truffert", "Manu Koné", "Enzo Millot", "Désiré Doué", "Michael Olise", "Jean-Philippe Mateta", "Alexandre Lacazette"],
-  "United States": ["Patrick Schulte", "John Tolkin", "Walker Zimmerman", "Miles Robinson", "Nathan Harriel", "Tanner Tessmann", "Djordje Mihailovic", "Paxten Aaronson", "Kevin Paredes", "Griffin Yow", "Duncan McGuire"],
-  Egypt: ["Mohamed Sobhi", "Osama Faisal", "Mohamed Abdelmonem", "Ahmed Hany", "Karim El Debes", "Ahmed Nabil", "Ibrahim Adel", "Mahmoud Saber", "Akram Tawfik", "Mostafa Mohamed", "Ahmed Sayed"],
-  "Dominican Republic": ["Xavier Valdez", "Peter González", "Nathan Bukele", "Óscar Ureña", "Ángel Montes de Oca", "Edison Azcona", "Jimmy Kaparos", "Junior Fernández", "Joao Urbáez", "Deiner Ramírez", "Alexander Cruz"],
-  Japan: ["Ayaka Yamashita", "Risa Shimizu", "Saki Kumagai", "Moeka Minami", "Hikaru Kitagawa", "Fuka Nagano", "Yui Hasegawa", "Hinata Miyazawa", "Aoba Fujino", "Mina Tanaka", "Riko Ueki"],
-  Canada: ["Kailen Sheridan", "Ashley Lawrence", "Vanessa Gilles", "Kadeisha Buchanan", "Jayde Riviere", "Quinn", "Jessie Fleming", "Julia Grosso", "Adriana Leon", "Cloé Lacasse", "Evelyne Viens"],
-  "New Zealand": ["Victoria Esson", "Claudia Bunge", "Rebekah Stott", "Meikayla Moore", "Ali Riley", "Olivia Chance", "Betsy Hassett", "Malia Steinmetz", "Hannah Wilkinson", "Indiah-Paige Riley", "Milly Clegg"],
-  Colombia: ["Catalina Pérez", "Manuela Vanegas", "Daniela Caracas", "Jorelyn Carabalí", "Carolina Arias", "Daniela Montoya", "Marcela Restrepo", "Leicy Santos", "Catalina Usme", "Mayra Ramírez", "Linda Caicedo"],
-  Germany: ["Ann-Katrin Berger", "Sarai Linder", "Marina Hegering", "Kathrin Hendrich", "Felicitas Rauch", "Sara Däbritz", "Sydney Lohmann", "Jule Brand", "Klara Bühl", "Lea Schüller", "Giulia Gwinn"],
-  Brazil: ["Lorena", "Antônia", "Lauren", "Tarciane", "Yasmim", "Ary Borges", "Adriana", "Kerolin", "Marta", "Gabi Portilho", "Ludmila"],
-};
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const coaches: Record<string, string> = {
-  Argentina: "Javier Mascherano", Morocco: "Tarik Sektioui", Uzbekistan: "Timur Kapadze", Spain: "Santi Denia",
-  France: "Thierry Henry", "United States": "Marko Mitrović", Egypt: "Rogério Micale", "Dominican Republic": "Ibai Gómez",
-  Japan: "Futoshi Ikeda", Canada: "Andy Spence", "New Zealand": "Jitka Klimková", Colombia: "Ángelo Marsiglia",
-  Germany: "Horst Hrubesch", Brazil: "Arthur Elias",
-};
+function formatDate(iso: string): string {
+  const day = iso.slice(8, 10);
+  const monthIndex = Number(iso.slice(5, 7)) - 1;
+  return `${day} ${MONTH_ABBR[monthIndex] ?? ""}`;
+}
 
-const squadFor = (team: string): Squad => {
-  const names = squadNames[team] ?? Array.from({ length: 11 }, (_, index) => `${team} Player ${index + 1}`);
+function formatTime(iso: string): string {
+  return iso.slice(11, 16);
+}
+
+function toRow(summary: MatchSummary): MatchRow {
+  const home = summary.home.score;
+  const away = summary.away.score;
   return {
-    coach: coaches[team] ?? "Unknown",
-    formation: "4-3-3",
-    startingXI: names.map((name, index) => ({ name, number: index + 1, position: positions[index] ?? "SUB" })),
-    bench: [{ name: `${(names[0] ?? team).split(" ")[0]} reserve`, number: 12, position: "GK" }],
+    id: summary.id,
+    iso: summary.kickoff,
+    date: formatDate(summary.kickoff),
+    time: formatTime(summary.kickoff),
+    home: summary.home.name,
+    homeNoc: summary.home.noc,
+    away: summary.away.name,
+    awayNoc: summary.away.noc,
+    homeGoals: home,
+    awayGoals: away,
+    score: home !== null && away !== null ? `${home}–${away}` : "–",
+    stage: summary.stage,
+    round: summary.round,
+    gender: summary.gender,
+    venue: summary.venueName,
+    city: summary.city,
+    scheduleStatus: summary.scheduleStatus,
+    sourceUrl: summary.sourceUrl,
   };
-};
+}
 
-const matches: Match[] = [
-  { id: "oly-m-001", iso: "2024-07-24T15:00:00Z", kickoffLocal: "2024-07-24T17:00:00+02:00", date: "24 Jul", time: "15:00", home: "Argentina", away: "Morocco", score: "1–2", homeGoals: 1, awayGoals: 2, halfTime: { home: 0, away: 2 }, stage: "Group B", round: "Group stage · Matchday 1", gender: "Men", venue: "Stade Geoffroy-Guichard", city: "Saint-Étienne", attendance: 32104, referee: "Glenn Nyberg", statusCode: "FT", scorers: [{ player: "Soufiane Rahimi", team: "away", minute: 45, type: "penalty" }, { player: "Ilias Akhomach", team: "away", minute: 45, type: "goal" }, { player: "Cristian Medina", team: "home", minute: 90, type: "goal" }] },
-  { id: "oly-m-002", iso: "2024-07-24T17:00:00Z", kickoffLocal: "2024-07-24T19:00:00+02:00", date: "24 Jul", time: "17:00", home: "Uzbekistan", away: "Spain", score: "1–2", homeGoals: 1, awayGoals: 2, halfTime: { home: 0, away: 1 }, stage: "Group C", round: "Group stage · Matchday 1", gender: "Men", venue: "Parc des Princes", city: "Paris", attendance: 41562, referee: "Facundo Tello", statusCode: "FT", scorers: [{ player: "Sergio Gómez", team: "away", minute: 24, type: "goal" }, { player: "Abbosbek Fayzullaev", team: "home", minute: 55, type: "goal" }, { player: "Juanlu Sánchez", team: "away", minute: 78, type: "goal" }] },
-  { id: "oly-m-003", iso: "2024-07-24T19:00:00Z", kickoffLocal: "2024-07-24T21:00:00+02:00", date: "24 Jul", time: "19:00", home: "Egypt", away: "Dominican Republic", score: "1–0", homeGoals: 1, awayGoals: 0, halfTime: { home: 0, away: 0 }, stage: "Group C", round: "Group stage · Matchday 1", gender: "Men", venue: "Stade de Bordeaux", city: "Bordeaux", attendance: 23410, referee: "Ismail Elfath", statusCode: "FT", scorers: [{ player: "Ibrahim Adel", team: "home", minute: 62, type: "goal" }] },
-  { id: "oly-m-004", iso: "2024-07-24T21:00:00Z", kickoffLocal: "2024-07-24T23:00:00+02:00", date: "24 Jul", time: "21:00", home: "France", away: "United States", score: "3–0", homeGoals: 3, awayGoals: 0, halfTime: { home: 1, away: 0 }, stage: "Group A", round: "Group stage · Matchday 1", gender: "Men", venue: "Stade de Marseille", city: "Marseille", attendance: 58412, referee: "Maurizio Mariani", statusCode: "FT", scorers: [{ player: "Alexandre Lacazette", team: "home", minute: 45, type: "goal" }, { player: "Jean-Philippe Mateta", team: "home", minute: 55, type: "goal" }, { player: "Michael Olise", team: "home", minute: 62, type: "goal" }] },
-  { id: "oly-w-001", iso: "2024-07-25T17:00:00Z", kickoffLocal: "2024-07-25T19:00:00+02:00", date: "25 Jul", time: "17:00", home: "Spain", away: "Japan", score: "2–1", homeGoals: 2, awayGoals: 1, halfTime: { home: 1, away: 0 }, stage: "Group C", round: "Group stage · Matchday 1", gender: "Women", venue: "Stade de la Beaujoire", city: "Nantes", attendance: 19845, referee: "Tori Penso", statusCode: "FT", scorers: [{ player: "Alexia Putellas", team: "home", minute: 12, type: "goal" }, { player: "Mariona Caldentey", team: "home", minute: 68, type: "penalty" }, { player: "Mina Tanaka", team: "away", minute: 90, type: "goal" }] },
-  { id: "oly-w-002", iso: "2024-07-25T19:00:00Z", kickoffLocal: "2024-07-25T21:00:00+02:00", date: "25 Jul", time: "19:00", home: "Canada", away: "New Zealand", score: "2–1", homeGoals: 2, awayGoals: 1, halfTime: { home: 1, away: 0 }, stage: "Group A", round: "Group stage · Matchday 1", gender: "Women", venue: "Stade Geoffroy-Guichard", city: "Saint-Étienne", attendance: 21033, referee: "Yoshimi Yamashita", statusCode: "FT", scorers: [{ player: "Cloé Lacasse", team: "home", minute: 13, type: "goal" }, { player: "Evelyne Viens", team: "home", minute: 79, type: "goal" }, { player: "Hannah Wilkinson", team: "away", minute: 88, type: "goal" }] },
-  { id: "oly-w-003", iso: "2024-07-25T21:00:00Z", kickoffLocal: "2024-07-25T23:00:00+02:00", date: "25 Jul", time: "21:00", home: "France", away: "Colombia", score: "3–2", homeGoals: 3, awayGoals: 2, halfTime: { home: 2, away: 1 }, stage: "Group A", round: "Group stage · Matchday 1", gender: "Women", venue: "Stade de Lyon", city: "Décines-Charpieu", attendance: 34220, referee: "Edina Alves", statusCode: "FT", scorers: [{ player: "Marie-Antoinette Katoto", team: "home", minute: 16, type: "goal" }, { player: "Linda Caicedo", team: "away", minute: 33, type: "goal" }, { player: "Sakina Karchaoui", team: "home", minute: 44, type: "penalty" }, { player: "Mayra Ramírez", team: "away", minute: 61, type: "goal" }, { player: "Kadidiatou Diani", team: "home", minute: 84, type: "goal" }] },
-  { id: "oly-m-029", iso: "2024-08-02T17:00:00Z", kickoffLocal: "2024-08-02T19:00:00+02:00", date: "02 Aug", time: "17:00", home: "Morocco", away: "United States", score: "4–0", homeGoals: 4, awayGoals: 0, halfTime: { home: 2, away: 0 }, stage: "Quarterfinal", round: "Knockout · Quarterfinal", gender: "Men", venue: "Parc des Princes", city: "Paris", attendance: 43012, referee: "Wilton Sampaio", statusCode: "FT", scorers: [{ player: "Soufiane Rahimi", team: "home", minute: 5, type: "goal" }, { player: "Soufiane Rahimi", team: "home", minute: 24, type: "penalty" }, { player: "Achraf Hakimi", team: "home", minute: 68, type: "goal" }, { player: "Mehdi Maouhoub", team: "home", minute: 90, type: "penalty" }] },
-  { id: "oly-m-030", iso: "2024-08-02T21:00:00Z", kickoffLocal: "2024-08-02T23:00:00+02:00", date: "02 Aug", time: "21:00", home: "France", away: "Argentina", score: "1–0", homeGoals: 1, awayGoals: 0, halfTime: { home: 1, away: 0 }, stage: "Quarterfinal", round: "Knockout · Quarterfinal", gender: "Men", venue: "Stade de Bordeaux", city: "Bordeaux", attendance: 38109, referee: "Chris Beath", statusCode: "FT", scorers: [{ player: "Jean-Philippe Mateta", team: "home", minute: 5, type: "goal" }] },
-  { id: "oly-w-024", iso: "2024-08-06T18:00:00Z", kickoffLocal: "2024-08-06T20:00:00+02:00", date: "06 Aug", time: "18:00", home: "United States", away: "Germany", score: "1–0", homeGoals: 1, awayGoals: 0, halfTime: { home: 0, away: 0 }, stage: "Semifinal", round: "Knockout · Semifinal", gender: "Women", venue: "Stade de Lyon", city: "Décines-Charpieu", attendance: 37533, referee: "Cheryl Foster", statusCode: "AET", scorers: [{ player: "Sophia Smith", team: "home", minute: 95, type: "goal" }] },
-  { id: "oly-m-032", iso: "2024-08-09T16:00:00Z", kickoffLocal: "2024-08-09T18:00:00+02:00", date: "09 Aug", time: "16:00", home: "France", away: "Spain", score: "3–5", homeGoals: 3, awayGoals: 5, halfTime: { home: 1, away: 1 }, stage: "Final", round: "Knockout · Gold medal match", gender: "Men", venue: "Parc des Princes", city: "Paris", attendance: 44851, referee: "Ivan Barton", statusCode: "AET", scorers: [{ player: "Fermín López", team: "away", minute: 11, type: "goal" }, { player: "Enzo Millot", team: "home", minute: 18, type: "goal" }, { player: "Fermín López", team: "away", minute: 25, type: "goal" }, { player: "Alex Baena", team: "away", minute: 28, type: "goal" }, { player: "Maghnes Akliouche", team: "home", minute: 79, type: "goal" }, { player: "Jean-Philippe Mateta", team: "home", minute: 90, type: "penalty" }, { player: "Sergio Camello", team: "away", minute: 100, type: "goal" }, { player: "Sergio Camello", team: "away", minute: 120, type: "goal" }] },
-  { id: "oly-w-026", iso: "2024-08-10T14:00:00Z", kickoffLocal: "2024-08-10T16:00:00+02:00", date: "10 Aug", time: "14:00", home: "Brazil", away: "United States", score: "0–1", homeGoals: 0, awayGoals: 1, halfTime: { home: 0, away: 0 }, stage: "Final", round: "Knockout · Gold medal match", gender: "Women", venue: "Parc des Princes", city: "Paris", attendance: 43813, referee: "Katia García", statusCode: "FT", scorers: [{ player: "Mallory Swanson", team: "away", minute: 57, type: "goal" }] },
+// Fixed display order for the stage filter; any stage not in this list (shouldn't happen for a
+// finished tournament) is appended, sorted, rather than silently dropped.
+const STAGE_ORDER = [
+  "Group A",
+  "Group B",
+  "Group C",
+  "Group D",
+  "Quarter-final",
+  "Semi-final",
+  "Bronze Medal Match",
+  "Gold Medal Match",
 ];
 
-const FLAGS: Record<string, string> = {
-  Argentina: "ar", Morocco: "ma", Uzbekistan: "uz", Spain: "es", Egypt: "eg",
-  "Dominican Republic": "do", France: "fr", "United States": "us", Japan: "jp",
-  Canada: "ca", "New Zealand": "nz", Colombia: "co", Germany: "de", Brazil: "br",
-};
-
-const Flag = ({ team, className = "" }: { team: string; className?: string }) => {
-  const code = FLAGS[team];
+const Flag = ({ noc, className = "" }: { noc: string; className?: string }) => {
+  const code = NOC_TO_ISO2[noc];
   if (!code) return <span aria-hidden="true" className={`inline-block h-3 w-4 shrink-0 rounded-sm bg-border ${className}`} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -126,53 +117,10 @@ const Flag = ({ team, className = "" }: { team: string; className?: string }) =>
   );
 };
 
-const endpointFor = (match: Match) => `/v2/football/paris-2024/matches/${match.id}.json?kickoff=${match.iso}`;
-
-
-const recordFor = (match: Match) => ({
-  competition: {
-    name: `Olympic Games Paris 2024 · Football ${match.gender}`,
-    season: "2024",
-    round: match.round,
-  },
-  venue: { name: match.venue, city: match.city },
-  kickoff: match.kickoffLocal,
-  status: match.statusCode,
-  teams: { home: match.home, away: match.away },
-  score: {
-    home: match.homeGoals,
-    away: match.awayGoals,
-    halfTime: { home: match.halfTime.home, away: match.halfTime.away },
-  },
-  attendance: match.attendance,
-  referee: match.referee,
-  scorers: match.scorers.map((scorer) => ({
-    player: scorer.player,
-    team: scorer.team === "home" ? match.home : match.away,
-    minute: scorer.minute,
-    type: scorer.type,
-  })),
-  lineups: { home: squadFor(match.home), away: squadFor(match.away) },
-  meta: { eventId: match.id, discipline: "Football", gender: match.gender, phase: match.stage, kickoffUtc: match.iso, endpoint: endpointFor(match) },
-});
-
-const compareRows = (match: Match) => [
-  { field: "match_id", expected: match.id, actual: match.id, state: "pass" as const },
-  { field: "kickoff", expected: match.kickoffLocal, actual: match.kickoffLocal, state: "pass" as const },
-  { field: "status", expected: match.statusCode, actual: match.statusCode, state: "pass" as const },
-  { field: "venue.name", expected: match.venue, actual: match.venue, state: "pass" as const },
-  { field: "venue.city", expected: match.city, actual: match.city, state: "pass" as const },
-  { field: "score", expected: `${match.homeGoals}-${match.awayGoals}`, actual: `${match.homeGoals}-${match.awayGoals}`, state: "pass" as const },
-  { field: "score.halfTime", expected: `${match.halfTime.home}-${match.halfTime.away}`, actual: `${match.halfTime.home}-${match.halfTime.away}`, state: "pass" as const },
-  { field: "scorers[]", expected: `${match.scorers.length} entries`, actual: `${match.scorers.length} entries`, state: "pass" as const },
-  { field: "lineups", expected: "11 + bench", actual: "11 + bench", state: "pass" as const },
-];
-
-
-type Phase = "idle" | "loading" | "filtering" | "generating" | "complete" | "error";
+type Phase = "idle" | "loading" | "generating" | "complete" | "error";
 type SortField = "kickoff" | "match" | "score" | "stage" | "gender";
 
-const phaseProgress: Record<Phase, number | null> = { idle: null, loading: 30, filtering: 60, generating: 85, complete: 100, error: null };
+const phaseProgress: Record<Phase, number | null> = { idle: null, loading: 45, generating: 90, complete: 100, error: null };
 const sortFieldLabels: Record<SortField, string> = { kickoff: "Kickoff", match: "Match", score: "Result", stage: "Stage", gender: "Gender" };
 
 function SortHeader({ field, className, sort, onSort }: { field: SortField; className?: string; sort: { field: SortField; dir: "asc" | "desc" }; onSort: (sort: { field: SortField; dir: "asc" | "desc" }) => void }) {
@@ -204,27 +152,33 @@ function FilterSelect({ label, value, options, onChange }: { label: string; valu
 }
 
 export function Workspace() {
-  const [phase, setPhase] = useState<Phase>("complete");
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [summaries, setSummaries] = useState<MatchSummary[]>([]);
+  const [details, setDetails] = useState<Map<string, DetailEntry>>(new Map());
+  const detailRequests = useRef(new Map<string, Promise<FootballRecord>>());
+
   const [gender, setGender] = useState("All");
   const [stage, setStage] = useState("All stages");
   const [team, setTeam] = useState("All teams");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ field: SortField; dir: "asc" | "desc" }>({ field: "kickoff", dir: "asc" });
 
-  const [selectedId, setSelectedId] = useState("oly-m-001");
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [inspector, setInspector] = useState<"endpoint" | "data" | "compare">("endpoint");
   const [toast, setToast] = useState("");
-  const [baseUrl, setBaseUrl] = useState("https://api.footyscores.test");
-  const [comparing, setComparing] = useState(false);
-  const [compared, setCompared] = useState(false);
+  // Defaults to wherever this app is actually being served from (works on localhost in dev and on
+  // whatever domain it's deployed to) instead of a placeholder domain that never resolves. Safe as
+  // a lazy initializer (no effect needed): this field only renders once data is loaded and a match
+  // is selected, long after the initial server-rendered/hydrated paint, so there's no mismatch risk.
+  const [baseUrl, setBaseUrl] = useState(() => (typeof window === "undefined" ? "" : window.location.origin));
+  const [exporting, setExporting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [failNext, setFailNext] = useState(false);
   const [leftWidth, setLeftWidth] = useState(58);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const activeFilterCount = [gender !== "All", stage !== "All stages", team !== "All teams"].filter(Boolean).length;
-
 
   const timers = useRef<number[]>([]);
   const splitRef = useRef<HTMLDivElement>(null);
@@ -281,57 +235,125 @@ export function Workspace() {
     timers.current = [];
   };
 
-  const run = () => {
+  const run = async () => {
     clearTimers();
-    setCompared(false);
+    setDetails(new Map());
+    detailRequests.current.clear();
+    setSelectedId(undefined);
     setPhase("loading");
-    if (failNext) {
-      timers.current.push(window.setTimeout(() => setPhase("error"), 1100));
-      return;
+    try {
+      const response = await fetch("/api/generate", { method: "POST" });
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        const message = body && typeof body === "object" && "error" in body ? String(body.error) : undefined;
+        throw new Error(message ?? `Generate failed (${response.status})`);
+      }
+      const { matches } = body as { matches: MatchSummary[] };
+      setPhase("generating");
+      setSummaries(matches);
+      timers.current.push(window.setTimeout(() => setPhase("complete"), 250));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "The Olympic schedule could not be loaded.");
+      setPhase("error");
     }
-    timers.current.push(window.setTimeout(() => setPhase("filtering"), 900));
-    timers.current.push(window.setTimeout(() => setPhase("generating"), 1700));
-    timers.current.push(window.setTimeout(() => setPhase("complete"), 2900));
   };
 
-  const reset = () => {
+  const reset = async () => {
     clearTimers();
     setPhase("idle");
+    setSummaries([]);
+    setDetails(new Map());
+    detailRequests.current.clear();
+    setSelectedId(undefined);
     setGender("All"); setStage("All stages"); setTeam("All teams"); setQuery(""); setSort({ field: "kickoff", dir: "asc" });
-    setCompared(false); setComparing(false); setExportOpen(false);
-    notify("Run reset");
+    setExportOpen(false);
+    try {
+      await fetch("/api/generate", { method: "DELETE" });
+      notify("Run reset — server cache cleared");
+    } catch {
+      notify("Run reset (server cache clear failed — will still refresh on next generate)");
+    }
   };
 
-  const teams = useMemo(() => ["All teams", ...Array.from(new Set(matches.flatMap((match) => [match.home, match.away]))).sort()], []);
+  const rows = useMemo(() => summaries.map(toRow), [summaries]);
+  const summaryById = useMemo(() => new Map(summaries.map((summary) => [summary.id, summary])), [summaries]);
 
   const dataReady = phase === "complete";
-  const running = phase === "loading" || phase === "filtering" || phase === "generating";
+  const running = phase === "loading" || phase === "generating";
   const progress = phaseProgress[phase];
+
+  const stages = useMemo(() => {
+    const present = new Set(rows.map((row) => row.stage));
+    const known = STAGE_ORDER.filter((label) => present.has(label));
+    const extra = [...present].filter((label) => !STAGE_ORDER.includes(label)).sort();
+    return ["All stages", ...known, ...extra];
+  }, [rows]);
+
+  const teams = useMemo(() => ["All teams", ...Array.from(new Set(rows.flatMap((row) => [row.home, row.away]))).sort()], [rows]);
 
   const filtered = useMemo(() => {
     if (!dataReady) return [];
     const q = query.trim().toLowerCase();
-    const rows = matches.filter((match) =>
-      (gender === "All" || match.gender === gender) &&
-      (stage === "All stages" || match.stage === stage) &&
-      (team === "All teams" || match.home === team || match.away === team) &&
-      (!q || [match.home, match.away, match.venue, match.id].some((field) => field.toLowerCase().includes(q))));
+    const matched = rows.filter((row) =>
+      (gender === "All" || row.gender === gender) &&
+      (stage === "All stages" || row.stage === stage) &&
+      (team === "All teams" || row.home === team || row.away === team) &&
+      (!q || [row.home, row.away, row.venue, row.id].some((field) => field.toLowerCase().includes(q))));
     const dir = sort.dir === "asc" ? 1 : -1;
-    return [...rows].sort((a, b) => {
+    return [...matched].sort((a, b) => {
       let cmp = 0;
       switch (sort.field) {
         case "kickoff": cmp = a.iso.localeCompare(b.iso); break;
         case "match": cmp = a.home.localeCompare(b.home) || a.away.localeCompare(b.away); break;
-        case "score": cmp = (a.homeGoals + a.awayGoals) - (b.homeGoals + b.awayGoals); break;
+        case "score": cmp = (a.homeGoals ?? 0) + (a.awayGoals ?? 0) - ((b.homeGoals ?? 0) + (b.awayGoals ?? 0)); break;
         case "stage": cmp = a.stage.localeCompare(b.stage); break;
         case "gender": cmp = a.gender.localeCompare(b.gender); break;
       }
       return cmp * dir;
     });
-  }, [dataReady, gender, stage, team, query, sort]);
+  }, [dataReady, rows, gender, stage, team, query, sort]);
 
-  const selected = filtered.find((match) => match.id === selectedId) ?? filtered[0];
-  const endpoint = selected ? endpointFor(selected) : "";
+  const selected = filtered.find((row) => row.id === selectedId) ?? filtered[0];
+  const selectedSummary = selected ? summaryById.get(selected.id) : undefined;
+  const endpoint = selectedSummary ? buildEndpoint(selectedSummary) : "";
+  const detailEntry = selectedSummary ? details.get(selectedSummary.id) : undefined;
+
+  const ensureDetail = useCallback((summary: MatchSummary): Promise<FootballRecord> => {
+    const cached = detailRequests.current.get(summary.id);
+    if (cached) return cached;
+    setDetails((prev) => new Map(prev).set(summary.id, { status: "loading" }));
+    const request = fetch(`/api/matches/${encodeURIComponent(summary.id)}`)
+      .then(async (response) => {
+        const body: unknown = await response.json();
+        if (!response.ok) {
+          const message = body && typeof body === "object" && "error" in body ? String(body.error) : undefined;
+          throw new Error(message ?? `Match detail request failed (${response.status})`);
+        }
+        return body as FootballRecord;
+      })
+      .then((record) => {
+        setDetails((prev) => new Map(prev).set(summary.id, { status: "ready", record }));
+        return record;
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Failed to load match detail.";
+        setDetails((prev) => new Map(prev).set(summary.id, { status: "error", message }));
+        detailRequests.current.delete(summary.id);
+        throw error;
+      });
+    detailRequests.current.set(summary.id, request);
+    return request;
+  }, []);
+
+  const retryDetail = (summary: MatchSummary) => {
+    detailRequests.current.delete(summary.id);
+    ensureDetail(summary).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!selectedSummary) return;
+    ensureDetail(selectedSummary).catch(() => {});
+  }, [selectedSummary, ensureDetail]);
 
   const copy = async (text: string, message: string) => {
     try {
@@ -342,24 +364,35 @@ export function Workspace() {
     }
   };
 
-  const runCompare = () => {
-    setComparing(true);
-    setCompared(false);
-    timers.current.push(window.setTimeout(() => { setComparing(false); setCompared(true); }, 1200));
-  };
+  const exportJson = async (scope: "all" | "filtered" | "one") => {
+    const targetRows = scope === "all" ? rows : scope === "filtered" ? filtered : selected ? [selected] : [];
+    const targets = targetRows
+      .map((row) => summaryById.get(row.id))
+      .filter((summary): summary is MatchSummary => Boolean(summary));
 
-  const exportJson = (scope: "all" | "filtered" | "one") => {
-    const rows = scope === "all" ? matches : scope === "filtered" ? filtered : selected ? [selected] : [];
-    const payload = { competition: "paris-2024", sport: "football", schema: "example.json", order: `${sort.field} ${sort.dir}`, generatedCount: rows.length, matches: rows.map(recordFor) };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `footyscores-paris2024-${scope}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setExportOpen(false);
-    notify(`Exported ${rows.length} record${rows.length === 1 ? "" : "s"} as JSON`);
+    if (!targets.length) {
+      setExportOpen(false);
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const records = await Promise.all(targets.map((summary) => ensureDetail(summary)));
+      const payload = { competition: "paris-2024", sport: "football", schema: "example.json", order: `${sort.field} ${sort.dir}`, generatedCount: records.length, matches: records };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `footyscores-paris2024-${scope}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      notify(`Exported ${records.length} record${records.length === 1 ? "" : "s"} as JSON`);
+    } catch {
+      notify("Export failed — one or more matches could not be loaded");
+    } finally {
+      setExporting(false);
+      setExportOpen(false);
+    }
   };
 
   const startResize = (event: React.MouseEvent) => {
@@ -372,20 +405,15 @@ export function Workspace() {
       <div className="mx-auto flex h-full max-w-workspace flex-col px-4 py-5 sm:px-6">
         <header className="animate-rise flex flex-nowrap items-center justify-between gap-3 border-b border-border pb-4 lg:gap-4 lg:pb-5">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="grid shrink-0 grid-cols-3 gap-1.5" aria-hidden="true">
-              <span className="size-3.5 rounded-full border-2 border-signal-cyan" /><span className="size-3.5 rounded-full border-2 border-signal-gold" /><span className="size-3.5 rounded-full border-2 border-signal-red" />
-              <span className="col-start-2 size-3.5 -translate-x-2 rounded-full border-2 border-signal-green" /><span className="size-3.5 -translate-x-2 rounded-full border-2 border-foreground" />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element -- next/image doesn't optimize .ico files */}
+            <img src="/favicon.ico" alt="" className="size-8 shrink-0" />
             <div className="min-w-0">
               <h1 className="truncate font-display text-base font-extrabold leading-none lg:text-lg">FOOTYSCORES · PARIS 2024 QA</h1>
-              <p className="mt-1 truncate text-xs uppercase tracking-20 text-muted-foreground">Reference endpoint workspace · mock data</p>
+              <p className="mt-1 truncate text-xs uppercase tracking-20 text-muted-foreground">Reference endpoint workspace · live Olympic data</p>
             </div>
           </div>
 
           <div className="hidden items-center gap-2 lg:flex lg:w-auto">
-            <label className="hidden min-h-10 items-center gap-2 rounded-md border border-border bg-panel px-3 text-xs text-muted-foreground lg:flex">
-              <input type="checkbox" className="accent-signal-red" checked={failNext} onChange={(event) => setFailNext(event.target.checked)} />Simulate source failure
-            </label>
             <Button variant="consoleOutline" size="sm" className="min-h-11 text-xs" onClick={reset}><RefreshCw />Reset</Button>
             <Button variant="console" size="sm" className="min-h-11 text-xs" onClick={run} disabled={running}>{running ? <LoaderCircle className="animate-spin" /> : <Play />}{running ? "Running…" : "Load & generate"}</Button>
           </div>
@@ -402,9 +430,6 @@ export function Workspace() {
                 <Button variant="ghost" size="sm" className="min-h-11 px-3 text-xs" onClick={() => setMenuOpen(false)}><X />Close</Button>
               </div>
               <div className="mt-4 grid gap-3">
-                <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border bg-panel px-3 text-xs text-muted-foreground">
-                  <input type="checkbox" className="accent-signal-red" checked={failNext} onChange={(event) => setFailNext(event.target.checked)} />Simulate source failure
-                </label>
                 <Button variant="consoleOutline" size="sm" className="min-h-11 w-full justify-start text-xs" onClick={() => { setMenuOpen(false); reset(); }}><RefreshCw />Reset</Button>
                 <Button variant="console" size="sm" className="min-h-11 w-full justify-start text-xs" onClick={() => { setMenuOpen(false); run(); }} disabled={running}>{running ? <LoaderCircle className="animate-spin" /> : <Play />}{running ? "Running…" : "Load & generate"}</Button>
               </div>
@@ -416,7 +441,7 @@ export function Workspace() {
 
           <div className="animate-rise mt-5" aria-label="Run progress">
             <div className="mb-2 flex justify-between text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><LoaderCircle className="size-3.5 animate-spin text-signal-gold" />{phase === "loading" ? "Retrieving schedule" : phase === "filtering" ? "Isolating football" : "Generating endpoints"}</span>
+              <span className="flex items-center gap-1.5"><LoaderCircle className="size-3.5 animate-spin text-signal-gold" />{phase === "loading" ? "Retrieving Olympic schedule" : "Generating endpoints"}</span>
               <span>{progress}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-border">
@@ -437,12 +462,12 @@ export function Workspace() {
                       <span className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${phase === "error" ? "border-signal-red/30 text-signal-red" : dataReady ? "border-signal-green/30 text-signal-green" : "border-signal-cyan/30 text-signal-cyan"}`}><span className={`size-1.5 rounded-full ${phase === "error" ? "bg-signal-red" : dataReady ? "bg-signal-green" : "bg-signal-cyan"}`} />{phase === "error" ? "Failed" : dataReady ? "Complete" : phase === "idle" ? "Idle" : "Running"}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span><b className="text-foreground">{dataReady ? matches.length : 0}</b> matches</span>
-                      <span><b className="text-signal-green">{dataReady ? matches.length : 0}</b> generated</span>
+                      <span><b className="text-foreground">{dataReady ? rows.length : 0}</b> matches</span>
+                      <span><b className="text-signal-green">{dataReady ? rows.length : 0}</b> generated</span>
                       <span>· {sort.field} {sort.dir}</span>
                     </div>
                   </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">Showing {filtered.length} of {dataReady ? matches.length : 0}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">Showing {filtered.length} of {dataReady ? rows.length : 0}</span>
                 </div>
                 <div className="mt-3 flex items-center gap-2 lg:hidden">
                   <label className="relative min-w-0 flex-1">
@@ -457,7 +482,7 @@ export function Workspace() {
                 </div>
                 <div className="mt-3 hidden items-center gap-2 lg:flex lg:flex-wrap" aria-label="Match filters">
                   <FilterSelect label="Gender" value={gender} options={["All", "Men", "Women"]} onChange={setGender} />
-                  <FilterSelect label="Stage" value={stage} options={["All stages", "Group A", "Group B", "Group C", "Quarterfinal", "Semifinal", "Final"]} onChange={setStage} />
+                  <FilterSelect label="Stage" value={stage} options={stages} onChange={setStage} />
                   <FilterSelect label="Team" value={team} options={teams} onChange={setTeam} />
                   <label className="relative ml-auto hidden min-w-56 flex-1 lg:block lg:max-w-72">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -475,7 +500,7 @@ export function Workspace() {
                       </div>
                       <div className="mt-3 grid gap-2 [&_label]:min-h-12 [&_label]:w-full [&_select]:ml-auto [&_select]:text-sm">
                         <FilterSelect label="Gender" value={gender} options={["All", "Men", "Women"]} onChange={setGender} />
-                        <FilterSelect label="Stage" value={stage} options={["All stages", "Group A", "Group B", "Group C", "Quarterfinal", "Semifinal", "Final"]} onChange={setStage} />
+                        <FilterSelect label="Stage" value={stage} options={stages} onChange={setStage} />
                         <FilterSelect label="Team" value={team} options={teams} onChange={setTeam} />
                         <div className="flex min-h-12 items-center gap-2 rounded-md border border-border bg-panel px-3">
                           <label className="relative flex flex-1 cursor-pointer items-center gap-2">
@@ -507,12 +532,12 @@ export function Workspace() {
                 <SortHeader field="gender" sort={sort} onSort={setSort} />
               </div>
               <div className="flex-1 overflow-auto"><div className="divide-y divide-border">
-                {phase === "loading" || phase === "filtering" || phase === "generating" ? (
+                {phase === "loading" || phase === "generating" ? (
                   <div className="grid min-h-64 place-items-center text-center text-sm text-muted-foreground">
                     <div>
                       <LoaderCircle className="mx-auto mb-2 size-6 animate-spin text-signal-cyan" />
                       Fetching and parsing schedule…<br />
-                      <span className="text-xs">{phase === "loading" ? "Retrieving events" : phase === "filtering" ? "Isolating football matches" : "Generating endpoints"}</span>
+                      <span className="text-xs">{phase === "loading" ? "Fetching the Olympic daily schedule (19 requests)" : "Generating endpoints"}</span>
                     </div>
                   </div>
                 ) : phase === "error" ? (
@@ -520,8 +545,8 @@ export function Workspace() {
                     <div>
                       <AlertTriangle className="mx-auto mb-2 size-6" />
                       Schedule source unavailable<br />
-                      <span className="text-xs text-muted-foreground">The official schedule returned HTTP 503.</span>
-                      <Button variant="consoleOutline" size="sm" className="mt-3 text-xs" onClick={() => { setFailNext(false); run(); }}><RefreshCw />Retry run</Button>
+                      <span className="text-xs text-muted-foreground">{errorMessage}</span>
+                      <Button variant="consoleOutline" size="sm" className="mt-3 text-xs" onClick={run}><RefreshCw />Retry run</Button>
                     </div>
                   </div>
                 ) : phase === "idle" ? (
@@ -529,46 +554,46 @@ export function Workspace() {
                     <div>
                       <Play className="mx-auto mb-2 size-6" />
                       No run yet<br />
-                      <span className="text-xs">Press Load &amp; generate to build the reference endpoints.</span>
+                      <span className="text-xs">Press Load &amp; generate to fetch the official Paris 2024 schedule and build the reference endpoints.</span>
                     </div>
                   </div>
-                ) : filtered.length ? filtered.map((match) => (
-                  <button key={match.id} aria-label={`${match.home} versus ${match.away}, ${match.date} at ${match.time}, ${match.gender}`} onClick={() => { setSelectedId(match.id); setCompared(false); setSheetOpen(true); }} className={`grid min-h-16 w-full cursor-pointer grid-cols-1 content-start items-start gap-2 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[1fr_auto] md:items-center md:gap-3 lg:grid-match-row lg:items-center ${selected?.id === match.id ? "md:bg-signal-gold/10 md:shadow-[inset_2px_0_0_var(--signal-gold)]" : "hover:bg-panel-raised"}`}>
+                ) : filtered.length ? filtered.map((row) => (
+                  <button key={row.id} aria-label={`${row.home} versus ${row.away}, ${row.date} at ${row.time}, ${row.gender}`} onClick={() => { setSelectedId(row.id); setSheetOpen(true); }} className={`grid min-h-16 w-full cursor-pointer grid-cols-1 content-start items-start gap-2 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[1fr_auto] md:items-center md:gap-3 lg:grid-match-row lg:items-center ${selected?.id === row.id ? "md:bg-signal-gold/10 md:shadow-[inset_2px_0_0_var(--signal-gold)]" : "hover:bg-panel-raised"}`}>
                     <span className="flex items-center gap-1.5 text-base font-medium leading-tight md:hidden">
-                      <Flag team={match.home} /><span className="truncate">{match.home}</span> <span className="text-muted-foreground">vs</span> <Flag team={match.away} /><span className="truncate">{match.away}</span>
+                      <Flag noc={row.homeNoc} /><span className="truncate">{row.home}</span> <span className="text-muted-foreground">vs</span> <Flag noc={row.awayNoc} /><span className="truncate">{row.away}</span>
                     </span>
                     <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground md:hidden">
-                      <span className="min-w-0 truncate">{match.date} · {match.time} UTC · {match.id} · {match.gender}</span>
-                      <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-foreground">{match.score}<span className="text-xs text-muted-foreground">{match.statusCode}</span><ChevronRight className="size-4 text-muted-foreground" /></span>
+                      <span className="min-w-0 truncate">{row.date} · {row.time} · {row.gender}</span>
+                      <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-foreground">{row.score}<ChevronRight className="size-4 text-muted-foreground" /></span>
                     </span>
                     <span className="flex items-center gap-3 text-xs md:hidden">
-                      <span className="min-w-0 truncate text-muted-foreground"><span className="text-foreground">Stage</span> · <span className={match.stage === "Final" ? "text-signal-gold" : "text-signal-cyan"}>{match.stage}</span></span>
+                      <span className="min-w-0 truncate text-muted-foreground"><span className="text-foreground">Stage</span> · <span className={row.stage.includes("Gold") ? "text-signal-gold" : "text-signal-cyan"}>{row.stage}</span></span>
                       <span className="flex shrink-0 items-center gap-1 text-signal-green"><span className="text-foreground">Output</span> · <span className="size-2 rounded-full bg-signal-green" />Generated</span>
                     </span>
 
-                    <span className="hidden text-sm lg:block"><strong className="block font-medium">{match.date}</strong><span className="text-xs text-muted-foreground">{match.time} UTC</span></span>
+                    <span className="hidden text-sm lg:block"><strong className="block font-medium">{row.date}</strong><span className="text-xs text-muted-foreground">{row.time} local</span></span>
                     <span className="hidden min-w-0 text-sm font-medium leading-tight md:block">
-                      <span className="flex min-w-0 items-center gap-1.5 truncate max-lg:text-base"><Flag team={match.home} /><span className="truncate">{match.home}</span> <span className="text-muted-foreground">vs</span> <Flag team={match.away} /><span className="truncate">{match.away}</span></span>
-                      <span className="mt-1 block truncate text-xs font-normal text-muted-foreground lg:hidden">{match.date} · {match.time} UTC · {match.id} · {match.gender}</span>
+                      <span className="flex min-w-0 items-center gap-1.5 truncate max-lg:text-base"><Flag noc={row.homeNoc} /><span className="truncate">{row.home}</span> <span className="text-muted-foreground">vs</span> <Flag noc={row.awayNoc} /><span className="truncate">{row.away}</span></span>
+                      <span className="mt-1 block truncate text-xs font-normal text-muted-foreground lg:hidden">{row.date} · {row.time} · {row.gender}</span>
                       <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs font-normal lg:hidden">
-                        <span className="min-w-0 truncate text-muted-foreground"><span className="text-foreground">Stage</span> · <span className={match.stage === "Final" ? "text-signal-gold" : "text-signal-cyan"}>{match.stage}</span></span>
+                        <span className="min-w-0 truncate text-muted-foreground"><span className="text-foreground">Stage</span> · <span className={row.stage.includes("Gold") ? "text-signal-gold" : "text-signal-cyan"}>{row.stage}</span></span>
                         <span className="flex shrink-0 items-center gap-1 text-signal-green"><span className="text-foreground">Output</span> · <span className="size-2 rounded-full bg-signal-green" />Generated</span>
                       </span>
-                      <span className="mt-1 hidden truncate text-xs font-normal text-muted-foreground lg:block">{match.id} · {match.gender} · {match.venue}, {match.city}</span>
+                      <span className="mt-1 hidden truncate text-xs font-normal text-muted-foreground lg:block">{row.gender} · {row.venue}, {row.city}</span>
                     </span>
-                    <span className="hidden shrink-0 items-center gap-2 text-sm md:flex">{match.score}<span className="text-xs text-muted-foreground">{match.statusCode}</span></span>
-                    <span className={`hidden text-xs lg:block ${match.stage === "Final" ? "text-signal-gold" : "text-signal-cyan"}`}>{match.stage}</span>
+                    <span className="hidden shrink-0 items-center gap-2 text-sm md:flex">{row.score}</span>
+                    <span className={`hidden text-xs lg:block ${row.stage.includes("Gold") ? "text-signal-gold" : "text-signal-cyan"}`}>{row.stage}</span>
                     <span className="hidden items-center gap-1.5 text-xs lg:flex text-signal-green"><span className="size-2 rounded-full bg-signal-green" />Generated</span>
                   </button>
 
                 )) : <div className="grid min-h-64 place-items-center px-6 text-center text-sm text-muted-foreground"><div><Search className="mx-auto mb-2 size-6" />No football matches found<br /><span className="text-xs">Adjust filters or clear the search.</span><Button variant="consoleOutline" size="sm" className="mt-3 text-xs" onClick={() => { setGender("All"); setStage("All stages"); setTeam("All teams"); setQuery(""); }}>Clear filters</Button></div></div>}
               </div></div>
               <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 md:hidden">
-                <p className="min-w-0 truncate text-xs text-muted-foreground">{filtered.length} of {dataReady ? matches.length : 0} records · {sort.field} {sort.dir}</p>
+                <p className="min-w-0 truncate text-xs text-muted-foreground">{filtered.length} of {dataReady ? rows.length : 0} records · {sort.field} {sort.dir}</p>
                 <div className="relative shrink-0">
-                  <Button variant="console" size="sm" className="min-h-11 text-xs" onClick={() => setExportOpen(!exportOpen)} aria-expanded={exportOpen} disabled={!dataReady}><Download />Export JSON<ChevronDown /></Button>
+                  <Button variant="console" size="sm" className="min-h-11 text-xs" onClick={() => setExportOpen(!exportOpen)} aria-expanded={exportOpen} disabled={!dataReady || exporting}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />}{exporting ? "Exporting…" : "Export JSON"}<ChevronDown /></Button>
                   {exportOpen && <div className="absolute bottom-full right-0 z-30 mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
-                    {([["all", `All ${matches.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => exportJson(scope)} className="block w-full cursor-pointer px-3 py-3 text-left text-sm hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
+                    {([["all", `All ${rows.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => exportJson(scope)} className="block w-full cursor-pointer px-3 py-3 text-left text-sm hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
                   </div>}
                 </div>
               </div>
@@ -597,8 +622,8 @@ export function Workspace() {
             >
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
                 <div className="min-w-0 md:hidden">
-                  <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium">{selected ? <><Flag team={selected.home} /><span className="truncate">{selected.home}</span><span className="text-muted-foreground">vs</span><Flag team={selected.away} /><span className="truncate">{selected.away}</span></> : "No match selected"}</p>
-                  <p className="truncate text-xs text-muted-foreground">{selected ? `${selected.id} · ${selected.date} · ${selected.time} UTC` : "—"}</p>
+                  <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium">{selected ? <><Flag noc={selected.homeNoc} /><span className="truncate">{selected.home}</span><span className="text-muted-foreground">vs</span><Flag noc={selected.awayNoc} /><span className="truncate">{selected.away}</span></> : "No match selected"}</p>
+                  <p className="truncate text-xs text-muted-foreground">{selected ? `${selected.date} · ${selected.time} local` : "—"}</p>
                 </div>
                 <div className="hidden min-w-0 gap-1 md:flex" role="tablist" aria-label="Match inspector">
                   {([['endpoint', 'Endpoint'], ['data', 'Source data'], ['compare', 'Compare']] as const).map(([value, label]) => <Button key={value} variant={inspector === value ? "console" : "ghost"} size="sm" role="tab" aria-selected={inspector === value} onClick={() => setInspector(value)} className="min-h-10 px-3 text-xs">{value === "compare" && <GitCompareArrows />}{label}</Button>)}
@@ -633,26 +658,39 @@ export function Workspace() {
                       </div>
                     </div>
                     <div className="mt-2 border-t border-border px-4 py-3">
-                      <p className="mb-3 text-xs uppercase tracking-16 text-muted-foreground">Fields used to generate endpoint</p>
+                      <p className="mb-3 text-xs uppercase tracking-16 text-muted-foreground">Fields used to generate this endpoint</p>
                       <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-xs">
                         <dt className="text-muted-foreground">sport</dt><dd>football</dd>
                         <dt className="text-muted-foreground">competition</dt><dd>paris-2024</dd>
-                        <dt className="text-muted-foreground">match_id</dt><dd>{selected.id}</dd>
-                        <dt className="text-muted-foreground">kickoff_utc</dt><dd>{selected.iso}</dd>
-                        <dt className="text-muted-foreground">participants</dt><dd className="flex flex-wrap items-center gap-x-1.5 gap-y-1"><span className="inline-flex items-center gap-1.5"><Flag team={selected.home} />{selected.home}</span><span className="text-muted-foreground">·</span><span className="inline-flex items-center gap-1.5"><Flag team={selected.away} />{selected.away}</span></dd>
-                        <dt className="text-muted-foreground">venue</dt><dd>{selected.venue}, {selected.city}</dd>
+                        <dt className="text-muted-foreground">kickoff date</dt><dd>{selected.date} · {selected.time} local</dd>
+                        <dt className="text-muted-foreground">home</dt><dd className="flex items-center gap-1.5"><Flag noc={selected.homeNoc} />{selected.home}</dd>
+                        <dt className="text-muted-foreground">away</dt><dd className="flex items-center gap-1.5"><Flag noc={selected.awayNoc} />{selected.away}</dd>
+                      </dl>
+                      <p className="mt-3 mb-3 text-xs uppercase tracking-16 text-muted-foreground">Additional match context</p>
+                      <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-xs">
                         <dt className="text-muted-foreground">round</dt><dd>{selected.round}</dd>
-                        <dt className="text-muted-foreground">status</dt><dd>{selected.statusCode}</dd>
+                        <dt className="text-muted-foreground">venue</dt><dd>{selected.venue}, {selected.city}</dd>
+                        <dt className="text-muted-foreground">source event id</dt><dd className="break-all">{selected.id}</dd>
                       </dl>
                     </div>
                   </div>}
 
                   {inspector === "data" && <div role="tabpanel" className="flex h-full flex-col">
                     <div className="mb-3 flex items-center justify-between px-4 pt-4">
-                      <p className="text-xs uppercase tracking-16 text-muted-foreground">Parsed schedule record</p>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => copy(JSON.stringify(recordFor(selected), null, 2), "Record JSON copied")}><Copy />Copy JSON</Button>
+                      <p className="text-xs uppercase tracking-16 text-muted-foreground">Parsed match record (example.json shape)</p>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={detailEntry?.status !== "ready"} onClick={() => { if (detailEntry?.status === "ready") copy(JSON.stringify(detailEntry.record, null, 2), "Record JSON copied"); }}><Copy />Copy JSON</Button>
                     </div>
-                    <pre className="mx-4 flex-1 overflow-auto rounded-md border border-border bg-background p-3 text-xs leading-6 text-muted-foreground"><code>{JSON.stringify(recordFor(selected), null, 2)}</code></pre>
+                    {detailEntry?.status === "ready" ? (
+                      <pre className="mx-4 flex-1 overflow-auto rounded-md border border-border bg-background p-3 text-xs leading-6 text-muted-foreground"><code>{JSON.stringify(detailEntry.record, null, 2)}</code></pre>
+                    ) : detailEntry?.status === "error" ? (
+                      <div className="mx-4 flex flex-1 flex-col items-center justify-center gap-2 rounded-md border border-signal-red/30 bg-signal-red/5 p-4 text-center text-xs text-signal-red">
+                        <AlertTriangle className="size-5" />
+                        {detailEntry.message}
+                        <Button variant="consoleOutline" size="sm" className="mt-1 text-xs" onClick={() => selectedSummary && retryDetail(selectedSummary)}><RefreshCw />Retry</Button>
+                      </div>
+                    ) : (
+                      <div className="mx-4 flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading match detail…</div>
+                    )}
                   </div>}
 
                   {inspector === "compare" && <div role="tabpanel" className="flex flex-col p-4">
@@ -668,13 +706,12 @@ export function Workspace() {
                         Test API base URL
                         <input className="mt-2 min-h-10 w-full rounded-md border border-border bg-panel px-3 text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
                       </label>
-                      <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" onClick={runCompare} disabled={comparing}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Run comparison"}</Button>
+                      <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" disabled><GitCompareArrows />Run comparison</Button>
                     </div>
-                    {compared ? <div className="mt-3 overflow-hidden rounded-md border border-border">
-                      <div className="grid grid-compare-row gap-2 border-b border-border bg-panel px-3 py-2.5 text-xs uppercase tracking-widest text-muted-foreground"><span>Field</span><span>Expected</span><span>Actual</span></div>
-                      {compareRows(selected).map((row) => <div key={row.field} className={`grid grid-compare-row gap-2 border-b border-border px-3 py-2.5 text-xs last:border-0 ${row.state === "pass" ? "" : "bg-signal-red/5"}`}><span className="text-muted-foreground">{row.field}</span><span className="break-all">{row.expected}</span><span className={`break-all ${row.state === "pass" ? "text-signal-green" : "text-signal-red"}`}>{row.actual}</span></div>)}
-                      <p className="bg-panel px-3 py-2.5 text-xs text-muted-foreground">{compareRows(selected).filter((row) => row.state === "pass").length} passed · 0 changed · 0 missing</p>
-                    </div> : <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground"><AlertTriangle className="size-5 shrink-0 text-signal-gold" /><span>{comparing ? "Comparison in progress…" : "Comparison has not run for this match yet."}</span></div>}
+                    <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground">
+                      <AlertTriangle className="size-5 shrink-0 text-signal-gold" />
+                      <span>Not implemented yet. This bonus feature — fetching the base URL above and diffing it against the generated reference — is planned but out of scope for this pass. Use Export JSON to get reference payloads for manual or scripted comparison in the meantime.</span>
+                    </div>
                   </div>}
                 </>
               )}
@@ -683,12 +720,12 @@ export function Workspace() {
               <div className="mt-auto hidden flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 md:flex">
                 <div>
                   <p className="text-xs uppercase tracking-14 text-muted-foreground">Export run</p>
-                  <p className="mt-0.5 text-xs">{filtered.length} of {dataReady ? matches.length : 0} records · JSON · {sort.field} {sort.dir}</p>
+                  <p className="mt-0.5 text-xs">{filtered.length} of {dataReady ? rows.length : 0} records · JSON · {sort.field} {sort.dir}</p>
                 </div>
                 <div className="relative">
-                  <Button variant="console" size="sm" className="min-h-10 text-xs" onClick={() => setExportOpen(!exportOpen)} aria-expanded={exportOpen} disabled={!dataReady}><Download />Export JSON<ChevronDown /></Button>
+                  <Button variant="console" size="sm" className="min-h-10 text-xs" onClick={() => setExportOpen(!exportOpen)} aria-expanded={exportOpen} disabled={!dataReady || exporting}>{exporting ? <LoaderCircle className="animate-spin" /> : <Download />}{exporting ? "Exporting…" : "Export JSON"}<ChevronDown /></Button>
                   {exportOpen && <div className="absolute bottom-full right-0 z-10 mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
-                    {([["all", `All ${matches.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => exportJson(scope)} className="block w-full px-3 py-3 text-left text-xs hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
+                    {([["all", `All ${rows.length} matches`], ["filtered", `Filtered (${filtered.length})`], ["one", "Selected match only"]] as const).map(([scope, label]) => <button key={scope} onClick={() => exportJson(scope)} className="block w-full px-3 py-3 text-left text-xs hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">{label}</button>)}
                   </div>}
                 </div>
               </div>
@@ -699,7 +736,7 @@ export function Workspace() {
         <footer className="mt-4 hidden flex-wrap lg:flex items-center justify-between gap-2 border-t border-border pt-4 text-xs uppercase tracking-widest text-muted-foreground">
           <span>Reference schema · example.json</span>
           <span>Deterministic order · {sort.field} {sort.dir}</span>
-          <span>Interactive prototype · mock data</span>
+          <span>Live source · stacy.olympics.com (Official Olympic Data Feed)</span>
         </footer>
       </div>
 
