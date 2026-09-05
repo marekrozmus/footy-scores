@@ -1,8 +1,7 @@
 import { loadMatchDetail } from "@/lib/odf/matchDetail";
 import { buildRecord, type FootballRecord } from "@/lib/odf/record";
-import { getRecord, getSummaries, setRecord } from "@/lib/server/matchCache";
+import { ensureSummaries, getRecord, setRecord } from "@/lib/server/matchCache";
 
-export class ScheduleNotLoadedError extends Error {}
 export class MatchNotFoundError extends Error {}
 
 // Shared by GET /api/matches/[id] and POST /api/compare: serves the cached record if this match
@@ -11,9 +10,7 @@ export async function getOrGenerateRecord(matchId: string): Promise<FootballReco
   const cached = getRecord(matchId);
   if (cached) return cached;
 
-  const summaries = getSummaries();
-  if (!summaries) throw new ScheduleNotLoadedError("No schedule loaded yet — run Load & generate first.");
-
+  const summaries = await ensureSummaries();
   const summary = summaries.find((candidate) => candidate.id === matchId);
   if (!summary) throw new MatchNotFoundError(`No football match found for id "${matchId}"`);
 

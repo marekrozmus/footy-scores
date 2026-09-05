@@ -238,6 +238,35 @@ network-boundary ones) — 38 new tests, taking the suite to 166. One lint snag 
 (`const { splitRef, startResize } = useResizableSplit(...)`), matching how `Workspace` itself already
 consumed the hook.
 
+### Update: fixed a real production bug — the in-memory cache's serverless gap, hit on Vercel
+
+The "wouldn't be shared across multiple instances of a multi-process/serverless deployment" caveat
+flagged above wasn't just theoretical — reported after deploying to Vercel: load the schedule, select
+a match, and sometimes get "Failed to load match detail: No schedule loaded yet — run Load & generate
+first," even though Load & generate had just succeeded. Retrying the whole load-and-select sequence a
+second time usually "fixed" it. Root cause: on Vercel, `POST /api/generate` and a later
+`GET /api/matches/[id]` can each land on a different serverless instance, and each instance has its
+own empty in-memory cache — the second request's instance genuinely never saw the first one's
+`setSummaries(...)` call. A second attempt "worked" only by coincidence (warm-instance reuse).
+
+Fixed by making the schedule listing self-healing instead of requiring a prior request to have hit
+the same instance: `ensureSummaries()` (`lib/server/matchCache.ts`) returns the cached list if
+present, otherwise fetches it itself (deduping concurrent callers onto one in-flight fetch) and
+caches the result. Safe to do because the Paris 2024 schedule is historical and deterministic —
+re-fetching it is never "wrong," just occasionally redundant across instances. Used by
+`getOrGenerateRecord` (`lib/server/records.ts`, dropping the old `ScheduleNotLoadedError` — that
+state literally can't occur anymore, a genuine Olympics-unreachable failure now just propagates as a
+normal error) and by `GET /v1/football/matches/[slug]`'s summary lookup. Per-match **detail** stays
+exactly as lazy and explicit as before — only the cheap schedule listing self-heals; a match whose
+full record hasn't been generated yet still correctly 409s, since that's not a caching artifact, it's
+genuinely "nobody's opened this match yet."
+
+Added `lib/server/records.test.ts` (didn't exist before) with a regression test for this exact bug —
+`getOrGenerateRecord` must recover when the schedule cache is empty rather than throwing — plus
+`ensureSummaries` tests in `matchCache.test.ts` (cache hit, cache miss triggers one fetch, concurrent
+callers share one in-flight fetch, `clearCache` forces a re-fetch, a genuine fetch failure still
+propagates and caches nothing). 10 new tests, suite at 178.
+
 ## Context
 
 `components/workspace.tsx` is a fully built UI (loading/filtering/generating phases, filters, sort,

@@ -4,7 +4,7 @@ import { diffJson, type DiffEntry } from "@/lib/odf/diff";
 import { buildEndpoint } from "@/lib/odf/record";
 import { mapWithConcurrency } from "@/lib/server/concurrency";
 import { getSummaries } from "@/lib/server/matchCache";
-import { getOrGenerateRecord, MatchNotFoundError, ScheduleNotLoadedError } from "@/lib/server/records";
+import { getOrGenerateRecord, MatchNotFoundError } from "@/lib/server/records";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       const diffs = diffJson(expected, actual);
       return diffs.length === 0 ? { matchId, status: "pass" } : { matchId, status: "fail", diffs };
     } catch (error) {
-      if (error instanceof ScheduleNotLoadedError || error instanceof MatchNotFoundError) {
+      if (error instanceof MatchNotFoundError) {
         return { matchId, status: "error", message: error.message };
       }
       return { matchId, status: "error", message: error instanceof Error ? error.message : "Comparison failed." };

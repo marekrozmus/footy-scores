@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getOrGenerateRecord, MatchNotFoundError, ScheduleNotLoadedError } from "@/lib/server/records";
+import { getOrGenerateRecord, MatchNotFoundError } from "@/lib/server/records";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +16,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const record = await getOrGenerateRecord(id);
     return NextResponse.json(record);
   } catch (error) {
-    if (error instanceof ScheduleNotLoadedError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
     if (error instanceof MatchNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }

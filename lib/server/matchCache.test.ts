@@ -1,9 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FootballRecord } from "@/lib/odf/record";
 import type { MatchSummary } from "@/lib/odf/types";
 
-import { clearCache, getRecord, getSummaries, setRecord, setSummaries } from "./matchCache";
+const { loadMatchSummaries } = vi.hoisted(() => ({ loadMatchSummaries: vi.fn<() => Promise<MatchSummary[]>>() }));
+vi.mock("@/lib/odf/schedule", () => ({ loadMatchSummaries }));
+
+import { clearCache, ensureSummaries, getRecord, getSummaries, setRecord, setSummaries } from "./matchCache";
 
 const summary: MatchSummary = {
   id: "FBLMTEAM11------------GPB-000100--",
@@ -37,6 +40,7 @@ const record: FootballRecord = {
 // leak state into each other via shared module scope.
 beforeEach(() => {
   clearCache();
+  loadMatchSummaries.mockReset();
 });
 
 describe("matchCache", () => {
@@ -77,5 +81,56 @@ describe("matchCache", () => {
     const updated: FootballRecord = { ...record, status: "AET" };
     setRecord(summary.id, updated);
     expect(getRecord(summary.id)?.status).toBe("AET");
+  });
+
+  describe("ensureSummaries", () => {
+    it("returns the cached summaries without fetching when already populated", async () => {
+      setSummaries([summary]);
+
+      const result = await ensureSummaries();
+
+      expect(result).toEqual([summary]);
+      expect(loadMatchSummaries).not.toHaveBeenCalled();
+    });
+
+    it("fetches and caches the schedule when nothing is cached yet — the serverless self-heal path", async () => {
+      loadMatchSummaries.mockResolvedValue([summary]);
+
+      const result = await ensureSummaries();
+
+      expect(result).toEqual([summary]);
+      expect(getSummaries()).toEqual([summary]);
+      expect(loadMatchSummaries).toHaveBeenCalledOnce();
+    });
+
+    it("shares one in-flight fetch across concurrent callers instead of fetching twice", async () => {
+      let resolve!: (summaries: MatchSummary[]) => void;
+      loadMatchSummaries.mockReturnValue(new Promise((res) => { resolve = res; }));
+
+      const first = ensureSummaries();
+      const second = ensureSummaries();
+      resolve([summary]);
+
+      expect(await first).toEqual([summary]);
+      expect(await second).toEqual([summary]);
+      expect(loadMatchSummaries).toHaveBeenCalledOnce();
+    });
+
+    it("re-fetches after clearCache, rather than reusing a stale in-flight promise", async () => {
+      loadMatchSummaries.mockResolvedValue([summary]);
+      await ensureSummaries();
+
+      clearCache();
+      await ensureSummaries();
+
+      expect(loadMatchSummaries).toHaveBeenCalledTimes(2);
+    });
+
+    it("propagates a failure (e.g. Olympics unreachable) without caching anything", async () => {
+      loadMatchSummaries.mockRejectedValue(new Error("Olympics is down"));
+
+      await expect(ensureSummaries()).rejects.toThrow("Olympics is down");
+      expect(getSummaries()).toBeNull();
+    });
   });
 });
