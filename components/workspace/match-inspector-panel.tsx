@@ -93,13 +93,6 @@ export function MatchInspectorPanel({
           <>
             {inspector === "endpoint" && <div role="tabpanel" className="flex flex-col">
               <div className="px-4 pt-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <span className="rounded bg-signal-red/15 px-2 py-0.5 text-xs font-semibold text-signal-red">GET</span>
-                    <span className="text-xs text-muted-foreground">Expected API request</span>
-                  </span>
-                  <span className="flex items-center gap-1 text-xs text-signal-green"><Check className="size-3.5" />Reference endpoint ready</span>
-                </div>
                 <div className="rounded-md border border-border bg-background px-3 py-3 text-xs leading-relaxed break-all">
                   <span className="text-signal-green">GET </span>{endpoint}
                 </div>
