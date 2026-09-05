@@ -47,6 +47,7 @@ export function MatchInspectorPanel({
   compareResult,
   comparing,
   onCompareSelected,
+  onComparePasted,
   rows,
   filtered,
   dataReady,
@@ -74,6 +75,7 @@ export function MatchInspectorPanel({
   compareResult: CompareResultEntry | undefined;
   comparing: boolean;
   onCompareSelected: () => void;
+  onComparePasted: (json: string) => void;
   rows: MatchRowData[];
   filtered: MatchRowData[];
   dataReady: boolean;
@@ -90,6 +92,10 @@ export function MatchInspectorPanel({
   // Disabled (not just visually) while there's genuinely nothing to show yet — but not on error,
   // since that's exactly where the retry action lives, and not on "ready", obviously.
   const sourceTabDisabled = detailEntry === undefined || detailEntry.status === "loading";
+
+  // Local, ephemeral scratch input — nothing else needs to read it, so unlike baseUrl it isn't
+  // lifted to the parent.
+  const [pastedJson, setPastedJson] = useState("");
 
   return (
     <section
@@ -197,6 +203,28 @@ export function MatchInspectorPanel({
                     : <>Need every match at once? Use the <b className="text-foreground">Compare</b> button next to Export JSON instead.</>}
                 </p>
               </div>
+
+              <div className="mt-3 rounded-md border border-border bg-background p-4">
+                <label className="block text-xs uppercase tracking-14 text-muted-foreground">
+                  Or paste a JSON response to compare directly
+                  <textarea
+                    className="mt-2 min-h-32 w-full rounded-md border border-border bg-panel px-3 py-2 font-mono text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    placeholder='{"competition": ..., "teams": ..., "score": ...}'
+                    value={pastedJson}
+                    onChange={(event) => setPastedJson(event.target.value)}
+                  />
+                </label>
+                <Button
+                  variant="consoleOutline"
+                  className="mt-3 min-h-10 w-full text-xs"
+                  onClick={() => onComparePasted(pastedJson)}
+                  disabled={detailEntry?.status !== "ready" || pastedJson.trim() === ""}
+                >
+                  <GitCompareArrows />Compare pasted JSON
+                </Button>
+                <p className="mt-2 text-xs text-muted-foreground">Runs entirely in the browser — no base URL or live API needed, since the match&apos;s reference data is already loaded.</p>
+              </div>
+
               {!compareResult ? (
                 <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground">
                   <AlertTriangle className="size-5 shrink-0 text-signal-gold" />

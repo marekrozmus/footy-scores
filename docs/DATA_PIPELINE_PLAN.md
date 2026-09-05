@@ -123,6 +123,21 @@ mode, since bulk compare is meaningless without actual diff logic behind it:
   per-match inspector's Compare tab now shows the real result for that match (pass / fail with a
   field-by-field diff table / error), with its own single-match "Compare this match" button.
 
+### Update: paste-JSON compare, no URL required
+
+The only way to supply the "actual" side was a base URL the server fetches from — no way to just
+paste a JSON response directly. Added a second option in the per-match Compare tab, entirely
+client-side: a textarea + "Compare pasted JSON" button. This needs no server round-trip at all —
+the selected match's reference record is already sitting in the client's `details` state (fetched
+once via `/api/matches/[id]` when the match was opened), and unlike the in-memory record
+`/api/compare` diffs against, this one has already gone through a real `JSON.stringify`/`parse` over
+the wire, so it doesn't need the undefined-vs-absent-key normalization the server route applies. So
+comparing is just `diffJson(stripMeta(detailEntry.record), JSON.parse(pastedText))`, run directly in
+the browser, writing into the same `compareResults` map the URL-based path uses (so the header
+badge and per-match result view are agnostic to which method produced them). Scoped to the single
+selected match only — bulk compare (all/filtered) still needs a URL, since there's no way to paste
+58 different responses at once.
+
 **Bug found and fixed during verification.** First live test: compared every match against this
 app's *own* `/v1/football/matches/[slug]` endpoint (same data on both sides — should be a guaranteed
 pass, so a genuinely useful check of the compare *mechanism* itself). Got real failures instead, all

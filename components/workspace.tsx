@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { diffJson } from "@/lib/odf/diff";
 import { buildEndpoint, stripMeta } from "@/lib/odf/record";
 import type { FootballRecord } from "@/lib/odf/record";
 import type { MatchSummary } from "@/lib/odf/types";
@@ -302,6 +303,30 @@ export function Workspace({ brand }: { brand: ReactNode }) {
     }
   };
 
+  // Client-side only, no server round-trip — unlike runCompare, there's nothing to fetch: the
+  // "actual" side is whatever the user pasted, and the "expected" side (the selected match's
+  // record) is already sitting in `details` from whenever this match was opened/loaded, and
+  // already went through a real JSON.stringify/parse over the wire (via /api/matches/[id]), so it
+  // doesn't need the undefined-vs-absent-key normalization the server-side compare route does.
+  const comparePasted = (rawText: string) => {
+    if (!selectedSummary || detailEntry?.status !== "ready") {
+      notify("Select a match with loaded detail first");
+      return;
+    }
+
+    let actual: unknown;
+    try {
+      actual = JSON.parse(rawText);
+    } catch {
+      notify("Pasted text is not valid JSON");
+      return;
+    }
+
+    const diffs = diffJson(stripMeta(detailEntry.record), actual);
+    setCompareResults((prev) => new Map(prev).set(selectedSummary.id, diffs.length === 0 ? { status: "pass" } : { status: "fail", diffs }));
+    notify(diffs.length === 0 ? "Pasted JSON matches the generated reference" : `Pasted JSON differs in ${diffs.length} place${diffs.length === 1 ? "" : "s"}`);
+  };
+
   const compareSummary = useMemo(() => {
     if (compareResults.size === 0) return null;
     let passed = 0;
@@ -409,6 +434,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
               compareResult={selected ? compareResults.get(selected.id) : undefined}
               comparing={comparing}
               onCompareSelected={() => runCompare("one")}
+              onComparePasted={comparePasted}
               rows={rows}
               filtered={filtered}
               dataReady={dataReady}

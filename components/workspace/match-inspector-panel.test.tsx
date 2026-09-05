@@ -47,6 +47,7 @@ const baseProps = {
   compareResult: undefined,
   comparing: false,
   onCompareSelected: vi.fn(),
+  onComparePasted: vi.fn(),
   rows: [matchRow()],
   filtered: [matchRow()],
   dataReady: true,
@@ -233,6 +234,34 @@ describe("MatchInspectorPanel", () => {
       );
       expect(screen.getByText("score.home")).toBeInTheDocument();
       expect(screen.getByText("1 difference")).toBeInTheDocument();
+    });
+
+    describe("paste-JSON compare", () => {
+      it("disables 'Compare pasted JSON' until detail is ready", () => {
+        render(<MatchInspectorPanel {...baseProps} inspector="compare" detailEntry={{ status: "loading" }} />);
+        expect(screen.getByRole("button", { name: /compare pasted json/i })).toBeDisabled();
+      });
+
+      it("disables 'Compare pasted JSON' while the textarea is empty, even with detail ready", () => {
+        render(<MatchInspectorPanel {...baseProps} inspector="compare" detailEntry={{ status: "ready", record }} />);
+        expect(screen.getByRole("button", { name: /compare pasted json/i })).toBeDisabled();
+      });
+
+      it("enables the button once text is pasted in, and calls onComparePasted with the textarea content", async () => {
+        // fireEvent.change instead of userEvent.type: userEvent's `.type` parses `{`/`}` as key
+        // modifier syntax (e.g. `{enter}`), so it can't type literal JSON. fireEvent.change also
+        // matches this interaction better anyway — it's meant to simulate a paste, not keystrokes.
+        const onComparePasted = vi.fn();
+        const user = userEvent.setup();
+        render(<MatchInspectorPanel {...baseProps} inspector="compare" detailEntry={{ status: "ready", record }} onComparePasted={onComparePasted} />);
+
+        fireEvent.change(screen.getByRole("textbox", { name: /paste a json response/i }), { target: { value: '{"a":1}' } });
+        const button = screen.getByRole("button", { name: /compare pasted json/i });
+        expect(button).toBeEnabled();
+        await user.click(button);
+
+        expect(onComparePasted).toHaveBeenCalledWith('{"a":1}');
+      });
     });
   });
 });
