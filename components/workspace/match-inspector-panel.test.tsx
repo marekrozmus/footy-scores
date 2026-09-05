@@ -182,6 +182,16 @@ describe("MatchInspectorPanel", () => {
   });
 
   describe("Compare tab", () => {
+    it("shows a live preview of the exact URL that will be requested, from the base URL and this match's endpoint", () => {
+      render(<MatchInspectorPanel {...baseProps} inspector="compare" baseUrl="http://localhost:3000" endpoint="/v1/football/matches/2024-07-24-argentina-vs-morocco" />);
+      expect(screen.getByText("http://localhost:3000/v1/football/matches/2024-07-24-argentina-vs-morocco")).toBeInTheDocument();
+    });
+
+    it("falls back to a placeholder example URL in the preview when no base URL is entered yet", () => {
+      render(<MatchInspectorPanel {...baseProps} inspector="compare" baseUrl="" endpoint="/v1/football/matches/2024-07-24-argentina-vs-morocco" />);
+      expect(screen.getByText("https://your-footyscores-deployment.example.com/v1/football/matches/2024-07-24-argentina-vs-morocco")).toBeInTheDocument();
+    });
+
     it("disables 'Compare this match' until detail is ready", () => {
       render(<MatchInspectorPanel {...baseProps} inspector="compare" detailEntry={{ status: "loading" }} />);
       expect(screen.getByRole("button", { name: /compare this match/i })).toBeDisabled();

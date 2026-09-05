@@ -194,8 +194,17 @@ export function MatchInspectorPanel({
                 </div>
                 <label className="mt-4 block text-xs uppercase tracking-14 text-muted-foreground">
                   Test API base URL
-                  <input className="mt-2 min-h-10 w-full rounded-md border border-border bg-panel px-3 text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring" value={baseUrl} onChange={(event) => onBaseUrlChange(event.target.value)} />
+                  <input
+                    className="mt-2 min-h-10 w-full rounded-md border border-border bg-panel px-3 text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    placeholder="https://your-footyscores-deployment.example.com"
+                    value={baseUrl}
+                    onChange={(event) => onBaseUrlChange(event.target.value)}
+                  />
                 </label>
+                <p className="mt-1.5 text-xs normal-case text-muted-foreground">
+                  The root URL of the FootyScores API you&apos;re testing — no path. For this match, that means requesting{" "}
+                  <code className="break-all text-foreground">{baseUrl || "https://your-footyscores-deployment.example.com"}{endpoint}</code>.
+                </p>
                 <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" onClick={onCompareSelected} disabled={comparing || detailEntry?.status !== "ready"}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Compare this match"}</Button>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {detailEntry?.status === "loading"

@@ -112,6 +112,49 @@ See `docs/DATA_PIPELINE_PLAN.md` for the full decision log, including things
 that were tried and reverted, and bugs found during verification against the
 live feed.
 
+## Running automated JSON comparison against the tested API
+
+This tool doesn't just generate reference data — it can also check a real
+FootyScores API deployment against that reference, match by match, so you
+don't have to eyeball JSON responses by hand.
+
+1. **Load the reference data first.** Click **Load & generate** and wait for
+   it to finish — comparison always runs against whatever's currently
+   generated.
+2. **Point it at the API you're testing.** Open any match, go to its
+   **Compare** tab, and fill in **Test API base URL** — the *root* URL of
+   the FootyScores deployment you want to test (no path), e.g.
+   `https://your-footyscores-deployment.example.com` or
+   `http://localhost:4000` for a local instance. The tab shows a live
+   preview of the exact URL it will request for that match, built as
+   `{base URL}{this match's endpoint}` (e.g.
+   `.../v1/football/matches/2024-07-24-argentina-vs-morocco`) — use that
+   preview to confirm you've got the right shape before running anything.
+3. **Run it**, one of two ways:
+   - **One match**: click **Compare this match** in that same tab. Requires
+     the match's own detail to have finished loading first (the button's
+     disabled until then).
+   - **Many at once**: use the **Compare** dropdown next to **Export JSON**
+     (top of the match list) and pick **All**, **Filtered**, or **Selected
+     match only**. This reuses the same base URL you entered in the Compare
+     tab.
+4. **Read the result.** A single-match compare pops open a modal with
+   **pass**, **fail** (a field-by-field diff table showing exactly what
+   differed), or **error** (e.g. the tested API was unreachable or returned
+   a non-2xx status). A bulk compare instead shows a `{passed}/{total}
+   compared` badge in the header — open any individual match's Compare tab
+   afterwards to see that match's own result.
+
+Comparison requests run **server-side**, not from your browser — so the
+tested API needs to be reachable from wherever *this app's server* is
+running (irrelevant if both are on the same machine in dev; matters if
+either one is deployed remotely).
+
+**No live API to test yet?** Use **Or paste a JSON response to compare
+directly** in the same Compare tab instead — paste any JSON response body in
+and it diffs against the reference immediately, entirely in the browser, no
+base URL or live API required.
+
 ## Testing
 
 Tests cover `lib/odf/*` and `lib/server/*` — the ODF parsing, endpoint/record
