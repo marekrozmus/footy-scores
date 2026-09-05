@@ -138,6 +138,24 @@ badge and per-match result view are agnostic to which method produced them). Sco
 selected match only — bulk compare (all/filtered) still needs a URL, since there's no way to paste
 58 different responses at once.
 
+### Update: comparison result shown in a modal
+
+The result of a single-match compare (URL-based or pasted) rendered inline at the bottom of the
+Compare tab, below two input cards — easy to miss if the result landed off-screen (a first attempt
+at fixing this by reordering the tab and auto-scrolling was tried and rolled back; a modal is more
+direct). `CompareResultModal` (`components/workspace/compare-result-modal.tsx`) now pops open
+automatically right when `runCompare("one")` or `comparePasted` produces a result — impossible to
+miss regardless of scroll position, follows the same backdrop-button + `role="dialog"` pattern
+already used for the mobile menu/filter sheets (`RunControls`/`MatchFilters`), just centered on the
+page instead of docked to an edge, since it isn't mobile-only. Bulk compare (all/filtered) does
+**not** trigger the modal — it stays as the header's `{passed}/{total} compared` summary badge,
+since a modal popping up once per match wouldn't make sense there.
+
+The pass/fail/error/diff-table rendering itself was extracted into `CompareResultView`
+(`components/workspace/compare-result-view.tsx`), shared between the modal and the Compare tab's
+own inline "last result" view (kept, for reference after the modal's closed) — so the two can't
+drift out of sync with each other.
+
 **Bug found and fixed during verification.** First live test: compared every match against this
 app's *own* `/v1/football/matches/[slug]` endpoint (same data on both sides — should be a guaranteed
 pass, so a genuinely useful check of the compare *mechanism* itself). Got real failures instead, all

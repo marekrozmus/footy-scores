@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/button";
-import { AlertTriangle, Check, Clipboard, Copy, GitCompareArrows, LoaderCircle, RefreshCw, X } from "@/components/icons";
+import { AlertTriangle, Clipboard, Copy, GitCompareArrows, LoaderCircle, RefreshCw, X } from "@/components/icons";
 import { stripMeta } from "@/lib/odf/record";
 
+import { CompareResultView } from "./compare-result-view";
 import { ExportCompareMenu } from "./export-compare-menu";
 import { Flag } from "./flag";
 import type { CompareResultEntry, DetailEntry, ExportScope, MatchRowData, SortState } from "./types";
@@ -189,7 +190,7 @@ export function MatchInspectorPanel({
                   <GitCompareArrows className="mt-0.5 size-5 text-signal-gold" />
                   <div>
                     <h3 className="font-display text-sm font-bold uppercase">Automated JSON comparison</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Compare the generated reference (strict example.json shape, no meta) with the response from the tested FootyScores API.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Compare the generated reference with the response from the tested FootyScores API.</p>
                   </div>
                 </div>
                 <label className="mt-4 block text-xs uppercase tracking-14 text-muted-foreground">
@@ -225,34 +226,9 @@ export function MatchInspectorPanel({
                 <p className="mt-2 text-xs text-muted-foreground">Runs entirely in the browser — no base URL or live API needed, since the match&apos;s reference data is already loaded.</p>
               </div>
 
-              {!compareResult ? (
-                <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground">
-                  <AlertTriangle className="size-5 shrink-0 text-signal-gold" />
-                  <span>Comparison has not run for this match yet.</span>
-                </div>
-              ) : compareResult.status === "error" ? (
-                <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-red/30 bg-signal-red/5 p-3 text-xs text-signal-red">
-                  <AlertTriangle className="size-5 shrink-0" />
-                  <span className="break-all">{compareResult.message}</span>
-                </div>
-              ) : compareResult.status === "pass" ? (
-                <div className="mt-3 flex items-center gap-2 rounded-md border border-signal-green/30 bg-signal-green/5 p-3 text-xs text-signal-green">
-                  <Check className="size-4 shrink-0" />
-                  <span>Exact match — the tested API&apos;s response matches the generated reference.</span>
-                </div>
-              ) : (
-                <div className="mt-3 overflow-hidden rounded-md border border-border">
-                  <div className="grid grid-compare-row gap-2 border-b border-border bg-panel px-3 py-2.5 text-xs uppercase tracking-widest text-muted-foreground"><span>Field</span><span>Expected</span><span>Actual</span></div>
-                  {compareResult.diffs.map((diff) => (
-                    <div key={diff.path} className="grid grid-compare-row gap-2 border-b border-border bg-signal-red/5 px-3 py-2.5 text-xs last:border-0">
-                      <span className="break-all text-muted-foreground">{diff.path}</span>
-                      <span className="break-all">{diff.kind === "extra" ? "—" : JSON.stringify(diff.expected)}</span>
-                      <span className="break-all text-signal-red">{diff.kind === "missing" ? "—" : JSON.stringify(diff.actual)}</span>
-                    </div>
-                  ))}
-                  <p className="bg-panel px-3 py-2.5 text-xs text-muted-foreground">{compareResult.diffs.length} difference{compareResult.diffs.length === 1 ? "" : "s"}</p>
-                </div>
-              )}
+              <div className="mt-3">
+                <CompareResultView result={compareResult} />
+              </div>
             </div>}
           </>
         )}

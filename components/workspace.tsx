@@ -8,6 +8,7 @@ import { buildEndpoint, stripMeta } from "@/lib/odf/record";
 import type { FootballRecord } from "@/lib/odf/record";
 import type { MatchSummary } from "@/lib/odf/types";
 
+import { CompareResultModal } from "./workspace/compare-result-modal";
 import { MatchInspectorPanel } from "./workspace/match-inspector-panel";
 import type { InspectorTab } from "./workspace/match-inspector-panel";
 import { MatchListPanel } from "./workspace/match-list-panel";
@@ -44,6 +45,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
   const [compareResults, setCompareResults] = useState<Map<string, CompareResultEntry>>(new Map());
   const [comparing, setComparing] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [compareResultModalOpen, setCompareResultModalOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(58);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -76,6 +78,13 @@ export function Workspace({ brand }: { brand: ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!compareResultModalOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setCompareResultModalOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [compareResultModalOpen]);
 
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -294,6 +303,9 @@ export function Workspace({ brand }: { brand: ReactNode }) {
         for (const { matchId, ...result } of results) next.set(matchId, result);
         return next;
       });
+      // Only for a single-match run — bulk (all/filtered) stays as the header summary badge, a
+      // modal popping up once per match compared wouldn't make sense there.
+      if (scope === "one") setCompareResultModalOpen(true);
       const passed = results.filter((result) => result.status === "pass").length;
       notify(`Compared ${results.length}: ${passed} passed, ${results.length - passed} failed`);
     } catch (error) {
@@ -324,6 +336,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
 
     const diffs = diffJson(stripMeta(detailEntry.record), actual);
     setCompareResults((prev) => new Map(prev).set(selectedSummary.id, diffs.length === 0 ? { status: "pass" } : { status: "fail", diffs }));
+    setCompareResultModalOpen(true);
     notify(diffs.length === 0 ? "Pasted JSON matches the generated reference" : `Pasted JSON differs in ${diffs.length} place${diffs.length === 1 ? "" : "s"}`);
   };
 
@@ -455,6 +468,11 @@ export function Workspace({ brand }: { brand: ReactNode }) {
       </div>
 
       <Toast message={toast} />
+      <CompareResultModal
+        open={compareResultModalOpen}
+        onClose={() => setCompareResultModalOpen(false)}
+        result={selected ? compareResults.get(selected.id) : undefined}
+      />
     </main>
   );
 }
