@@ -102,11 +102,15 @@ The single-match Compare tab was a stub ("not implemented yet"). Built it for re
 mode, since bulk compare is meaningless without actual diff logic behind it:
 
 - **`lib/odf/diff.ts`** — `diffJson(expected, actual)`, a structural JSON diff (missing/extra/changed
-  per field path). Arrays are compared by index, not content-matched — a reordering-only difference
-  in an array of objects shows up as per-index changes rather than "same items, different order";
-  a known limitation, not a bug. Verified with 9 hand-written cases (identical, changed primitive,
-  missing/extra key, array length mismatch in both directions, null-vs-object, nested change) run
-  directly with `node --experimental-strip-types`, all passing.
+  per field path). Arrays (`scorers`, `startingXI`, `bench`) are matched **by content, not index**:
+  items that are exactly equal are paired off regardless of position first, so a reordering-only
+  difference reports no diff at all; only genuine leftovers (after matching) get diffed pairwise or
+  reported missing/extra. (First pass compared strictly by index — reordered-but-identical arrays
+  produced spurious per-index "changed" noise; fixed by matching on content instead.) Verified with
+  hand-written cases (identical, changed primitive, missing/extra key, array length mismatch in both
+  directions, null-vs-object, nested change, reordered arrays, a genuine change mixed in with
+  reordered items, duplicate entries) run directly with `node --experimental-strip-types`, all
+  passing.
 - **`POST /api/compare`** (`{ baseUrl, matchIds }` → `{ results }`) — runs **server-side**
   deliberately, so the tested API being reachable from this server (not the QA engineer's browser)
   is what matters, regardless of whether that API has CORS enabled for wherever this tool is hosted.

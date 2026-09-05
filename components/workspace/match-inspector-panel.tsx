@@ -183,7 +183,7 @@ export function MatchInspectorPanel({
                   <GitCompareArrows className="mt-0.5 size-5 text-signal-gold" />
                   <div>
                     <h3 className="font-display text-sm font-bold uppercase">Automated JSON comparison</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Compare the generated reference (strict example.json shape, no meta) with the response from the tested FootyScores API. Runs server-side, so the tested API doesn&apos;t need CORS enabled for this app&apos;s origin.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Compare the generated reference (strict example.json shape, no meta) with the response from the tested FootyScores API.</p>
                   </div>
                 </div>
                 <label className="mt-4 block text-xs uppercase tracking-14 text-muted-foreground">
