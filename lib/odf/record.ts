@@ -52,6 +52,16 @@ export type FootballRecord = {
   };
 };
 
+// The example.json shape, with nothing added — for a strict/deep-equal comparison against a
+// FootyScores response. Use when a caller explicitly asks for the exact 8-key structure instead of
+// the additive `meta` block (see GET /v1/football/matches/[slug]?meta=false).
+export type StrictFootballRecord = Omit<FootballRecord, "meta">;
+
+export function stripMeta(record: FootballRecord): StrictFootballRecord {
+  const { competition, venue, kickoff, status, teams, score, scorers, lineups } = record;
+  return { competition, venue, kickoff, status, teams, score, scorers, lineups };
+}
+
 export function buildRecord(summary: MatchSummary, detail: MatchDetail): FootballRecord {
   return {
     competition: {

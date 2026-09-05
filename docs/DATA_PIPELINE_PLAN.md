@@ -67,6 +67,35 @@ correctly 409s ("hasn't been generated yet") → `GET /api/matches/FBLMTEAM11---
 fetches and caches the real Argentina v Morocco record → the same reference URL now returns 200 with
 the full, real `example.json`-shaped record.
 
+### Update: cache invalidation, and a strict/exact-shape mode
+
+**Cache invalidation without a restart.** `lib/server/matchCache.ts` gained `clearCache()`, and
+`DELETE /api/generate` calls it — resets both cached summaries and every generated record. The
+UI's **Reset** button now calls this (previously it only cleared client-side state), so Reset
+genuinely invalidates the server cache too, not just the browser's view of it.
+
+**Position granularity — checked, confirmed as a real data-source limit, not a parsing gap.** A
+review flagged that lineups only expose broad positions (`GK`/`DF`/`MF`/`FW`) versus example.json's
+illustrative specific ones (`RB`, `CB`, `CM`, `LW`, ...). Fetched the ODF's own canonical glossary
+(`GLO_Positions~comp=OG2024~disc=FBL~lang=ENG.json`) — it defines exactly those four codes, nothing
+more specific. There is a second per-starter code in the raw feed (e.g. `M27`, `D05`, `F03`), but
+cross-referencing a full lineup shows it's a pitch/formation-diagram grid slot (line letter + slot
+number, present only for starters), not a semantic role — deriving `RB` vs `CB` from it would mean
+guessing based on the team's formation shape rather than reading real data, so it's intentionally
+not used. Left as broad categories.
+
+**`meta` is strict-by-default now, not opt-out.** First pass had `meta` included by default with an
+opt-out `?meta=false` — backwards, since it meant the spec-compliant shape (the one an automated
+comparison actually needs) required knowing about a query param, while the default silently didn't
+match example.json. Flipped it: `GET /v1/football/matches/[slug]` now returns exactly example.json's
+8 keys with **no param needed** (via `stripMeta()` in `lib/odf/record.ts`;
+`StrictFootballRecord` = `FootballRecord` minus `meta`). The traceability fields (source event id,
+endpoint, attendance, referee, penalty shootout) aren't gone — they're always in the
+`X-Match-Meta` response header (JSON-encoded), and `?meta=true` additionally puts the `meta` block
+back in the body for a human browsing this in a tab. Verified live: default body is exactly
+`competition, kickoff, lineups, score, scorers, status, teams, venue` with `X-Match-Meta` present in
+headers; `?meta=true` adds `meta` back into the body too.
+
 ## Context
 
 `components/workspace.tsx` is a fully built UI (loading/filtering/generating phases, filters, sort,
