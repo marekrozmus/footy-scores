@@ -23,8 +23,9 @@ This codebase splits cleanly into two kinds of modules — test them differently
 - **Pure logic** (`lib/odf/diff.ts`, `lib/odf/record.ts`,
   `lib/server/concurrency.ts`): plain functions, no I/O. Test these directly
   and exhaustively — they're cheap to test and where real bugs have actually
-  been found (e.g. the `stripMeta`/optional-field-`undefined` bug in
-  `record.ts`, caught by comparing generated output against itself).
+  been found (e.g. the optional-field-`undefined` bug in `record.ts` —
+  `stoppage`/`assist` were being set to `undefined` instead of omitted, caught
+  by comparing generated output against itself).
 - **Network-boundary modules** (`lib/odf/schedule.ts`, `lib/odf/matchDetail.ts`):
   these call `fetch` against the real Olympic ODF API. Never let a test hit
   the network — mock `global.fetch` with `vi.stubGlobal("fetch", ...)` and a
@@ -120,8 +121,9 @@ which ones the test actually depends on.
 
 - Prefer `toEqual`/`toMatchObject` for whole-object comparisons over
   asserting field-by-field — it's both shorter and catches unintended extra
-  fields (which has been a real bug class in this codebase — see the `meta`
-  strict-shape work in `lib/odf/record.ts`).
+  fields (which has been a real bug class in this codebase — see the
+  exactly-8-keys test in `record.test.ts`, added after an unrequested `meta`
+  block was found to have crept into every generated record and removed).
 - When testing a function that returns an array order-sensitively (e.g.
   `loadMatchSummaries`'s kickoff-ascending sort), assert the actual order,
   not just membership (`toEqual([...])`, not `toEqual(expect.arrayContaining([...]))`).

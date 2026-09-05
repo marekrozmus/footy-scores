@@ -114,8 +114,8 @@ mode, since bulk compare is meaningless without actual diff logic behind it:
 - **`POST /api/compare`** (`{ baseUrl, matchIds }` → `{ results }`) — runs **server-side**
   deliberately, so the tested API being reachable from this server (not the QA engineer's browser)
   is what matters, regardless of whether that API has CORS enabled for wherever this tool is hosted.
-  Concurrency-capped at 6 (`lib/server/concurrency.ts`), 8s timeout per match. Compares the strict
-  (no-`meta`) shape against whatever JSON the tested API returns for that match's endpoint;
+  Concurrency-capped at 6 (`lib/server/concurrency.ts`), 8s timeout per match. Compares the generated
+  record (exactly example.json's 8 keys) against whatever JSON the tested API returns for that match's endpoint;
   `getOrGenerateRecord` (`lib/server/records.ts`, factored out of `/api/matches/[id]` so both routes
   share it) fills in any match that hasn't been generated yet.
 - **UI**: a "Compare" dropdown next to Export JSON (all/filtered/selected match, mirroring the
@@ -132,7 +132,7 @@ the selected match's reference record is already sitting in the client's `detail
 once via `/api/matches/[id]` when the match was opened), and unlike the in-memory record
 `/api/compare` diffs against, this one has already gone through a real `JSON.stringify`/`parse` over
 the wire, so it doesn't need the undefined-vs-absent-key normalization the server route applies. So
-comparing is just `diffJson(stripMeta(detailEntry.record), JSON.parse(pastedText))`, run directly in
+comparing is just `diffJson(detailEntry.record, JSON.parse(pastedText))`, run directly in
 the browser, writing into the same `compareResults` map the URL-based path uses (so the header
 badge and per-match result view are agnostic to which method produced them). Scoped to the single
 selected match only — bulk compare (all/filtered) still needs a URL, since there's no way to paste
@@ -171,6 +171,35 @@ construction now spreads those fields in conditionally instead of assigning `und
 `expected` through `JSON.parse(JSON.stringify(...))` as a defensive normalization, so both sides of
 every comparison are judged purely as JSON values. Re-verified live: all 58 matches now report
 `pass` comparing against the app's own endpoint.
+
+### Update: `meta` block removed entirely — it was never a real requirement
+
+Traced where `meta` (and its only dependents: `attendance`, `referee`, `penaltyShootout`) actually
+came from, and it wasn't requirements or fetched data — it was carried forward, uncritically, from
+the very first mock-UI commit's fictional demo data, then never questioned while the real pipeline
+was built on top of it. `example.json` has exactly 8 top-level keys; the task says the generated
+records must match that shape. Nothing ever asked for a 9th `meta` key, an `X-Match-Meta` header, or
+a `?meta=true` toggle — the "strict-by-default" design described in the previous section was solving
+a problem (a spec-compliant shape needing an opt-out) that only existed because of this unrequested
+addition in the first place.
+
+Removed everything: `meta`/`StrictFootballRecord`/`stripMeta()` from `lib/odf/record.ts`, the
+`X-Match-Meta` header and `?meta=true` handling from `GET /v1/football/matches/[slug]`,
+`OdfExtendedInfo`/`OdfOfficial` types and the attendance/referee/penalty-shootout parsing from
+`lib/odf/types.ts` and `matchDetail.ts` (including `toPenaltyShootout()`, referenced in the
+verification note above — the `periodScore` vs `score` distinction it encoded is retained inside
+`deriveStatus`, since that part *is* real behavior derived from the feed, just no longer surfaced as
+a standalone `penaltyShootout` field), and every downstream reference in `app/api/compare/route.ts`,
+`components/workspace.tsx`, and `components/workspace/match-inspector-panel.tsx`. The two routes that
+read `record.meta.endpoint` now compute the endpoint via `buildEndpoint(summary)` looked up
+separately instead. `GET /v1/football/matches/[slug]` now returns exactly example.json's 8 keys,
+unconditionally — no header, no query param, no toggle.
+
+Verified post-removal: `npx tsc --noEmit` and `npm run lint` clean, full Vitest suite green (128
+tests, 19 files), and a live end-to-end run against the real ODF API (generate → detail fetch →
+reference endpoint → self-compare) confirmed the reference endpoint returns exactly
+`competition, kickoff, lineups, score, scorers, status, teams, venue` and `POST /api/compare` still
+reports `pass` using the new `buildEndpoint(summary)` lookup.
 
 ## Context
 

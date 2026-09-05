@@ -36,13 +36,6 @@ export type OdfDayScheduleResponse = { units: OdfScheduleUnit[] };
 
 // --- per-match detail (RES_ByRSC_H2H) ---
 
-export type OdfExtendedInfo = { ei_code: string; ei_value: string };
-
-export type OdfOfficial = {
-  function: { functionCode: string };
-  official: { name: string };
-};
-
 export type OdfPeriodScore = { score: string; periodScore?: string };
 export type OdfPeriod = { p_code: string; home: OdfPeriodScore; away: OdfPeriodScore };
 
@@ -79,8 +72,6 @@ export type OdfPbpAction = {
 export type OdfPlayByPlayPeriod = { actions: OdfPbpAction[] };
 
 export type OdfMatchResults = {
-  extendedInfos: OdfExtendedInfo[];
-  officials: OdfOfficial[];
   periods: OdfPeriod[];
   items: OdfResultItem[];
   playByPlay: OdfPlayByPlayPeriod[];
@@ -137,9 +128,6 @@ export type MatchDetail = {
   status: "FT" | "AET" | "PEN";
   halfTime: { home: number; away: number };
   fullTime: { home: number; away: number };
-  penaltyShootout?: { home: number; away: number };
-  attendance: number | null;
-  referee: string | null;
   scorers: Scorer[];
   lineups: { home: Lineup; away: Lineup };
 };

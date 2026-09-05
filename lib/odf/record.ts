@@ -22,6 +22,10 @@ export function buildEndpoint(summary: MatchSummary): string {
   return `/v1/football/matches/${buildMatchSlug(summary)}`;
 }
 
+// Exactly example.json's structure — competition, venue, kickoff, status, teams, score, scorers,
+// lineups — nothing added. (An earlier version added a `meta` block here for "QA traceability";
+// removed — it traced back to the original mock UI's invented demo data, not to any actual
+// requirement or real need, and contradicted the "exactly the same as example.json" spec.)
 export type FootballRecord = {
   competition: { name: string; season: string; round: string };
   venue: { name: string; city: string };
@@ -38,29 +42,7 @@ export type FootballRecord = {
     type: string;
   }[];
   lineups: MatchDetail["lineups"];
-  // Additive fields beyond example.json's core shape, kept for QA traceability. Drop this block
-  // if the generated record needs to match example.json's exact key set with nothing added.
-  meta: {
-    eventId: string;
-    discipline: "Football";
-    gender: MatchSummary["gender"];
-    endpoint: string;
-    sourceUrl: string;
-    attendance: number | null;
-    referee: string | null;
-    penaltyShootout?: { home: number; away: number };
-  };
 };
-
-// The example.json shape, with nothing added — for a strict/deep-equal comparison against a
-// FootyScores response. Use when a caller explicitly asks for the exact 8-key structure instead of
-// the additive `meta` block (see GET /v1/football/matches/[slug]?meta=false).
-export type StrictFootballRecord = Omit<FootballRecord, "meta">;
-
-export function stripMeta(record: FootballRecord): StrictFootballRecord {
-  const { competition, venue, kickoff, status, teams, score, scorers, lineups } = record;
-  return { competition, venue, kickoff, status, teams, score, scorers, lineups };
-}
 
 export function buildRecord(summary: MatchSummary, detail: MatchDetail): FootballRecord {
   return {
@@ -91,15 +73,5 @@ export function buildRecord(summary: MatchSummary, detail: MatchDetail): Footbal
       type: scorer.type,
     })),
     lineups: detail.lineups,
-    meta: {
-      eventId: summary.id,
-      discipline: "Football",
-      gender: summary.gender,
-      endpoint: buildEndpoint(summary),
-      sourceUrl: summary.sourceUrl,
-      attendance: detail.attendance,
-      referee: detail.referee,
-      penaltyShootout: detail.penaltyShootout,
-    },
   };
 }

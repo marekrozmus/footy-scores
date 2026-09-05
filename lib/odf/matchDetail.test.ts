@@ -29,8 +29,6 @@ function resultItem(overrides: Partial<OdfResultItem> & Pick<OdfResultItem, "tea
 function baseResponse(overrides: Partial<OdfMatchDetailResponse["results"]> = {}): OdfMatchDetailResponse {
   return {
     results: {
-      extendedInfos: [{ ei_code: "ATTENDANCE", ei_value: "26717" }],
-      officials: [{ function: { functionCode: "RE" }, official: { name: "NYBERG Glenn" } }],
       periods: [period("H1", "0", "1"), period("H2", "1", "2"), period("TOT", "1", "2")],
       items: [resultItem({ teamCode: home.code }), resultItem({ teamCode: away.code })],
       playByPlay: [],
@@ -59,7 +57,6 @@ describe("loadMatchDetail", () => {
     stubFetchOnce(baseResponse());
     const detail = await loadMatchDetail("unit-id", home, away);
     expect(detail.status).toBe("FT");
-    expect(detail.penaltyShootout).toBeUndefined();
   });
 
   it("derives status AET when extra-time periods are present", async () => {
@@ -68,10 +65,7 @@ describe("loadMatchDetail", () => {
     expect(detail.status).toBe("AET");
   });
 
-  it("derives status PEN and reads the shootout tally from periodScore, not score", async () => {
-    // Regression test for a real bug: the shootout score lives in `periodScore` on the PSO period —
-    // `score` there stays the pre-shootout (tied) goal score. Using the wrong field silently reports
-    // a 0-0 shootout regardless of the real result.
+  it("derives status PEN when a PSO (penalty shoot-out) period is present", async () => {
     stubFetchOnce(
       baseResponse({
         periods: [
@@ -86,22 +80,7 @@ describe("loadMatchDetail", () => {
     );
     const detail = await loadMatchDetail("unit-id", home, away);
     expect(detail.status).toBe("PEN");
-    expect(detail.penaltyShootout).toEqual({ home: 2, away: 4 });
     expect(detail.fullTime).toEqual({ home: 0, away: 0 });
-  });
-
-  it("reads attendance and referee from extendedInfos/officials", async () => {
-    stubFetchOnce(baseResponse());
-    const detail = await loadMatchDetail("unit-id", home, away);
-    expect(detail.attendance).toBe(26717);
-    expect(detail.referee).toBe("NYBERG Glenn");
-  });
-
-  it("returns null attendance/referee when absent, instead of NaN or throwing", async () => {
-    stubFetchOnce(baseResponse({ extendedInfos: [], officials: [] }));
-    const detail = await loadMatchDetail("unit-id", home, away);
-    expect(detail.attendance).toBeNull();
-    expect(detail.referee).toBeNull();
   });
 
   it("splits starters into startingXI and everyone else into bench, reading formation/coach/position/number", async () => {

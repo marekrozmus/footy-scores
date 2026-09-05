@@ -110,33 +110,19 @@ function toScorers(response: OdfMatchDetailResponse, homeCode: string): Scorer[]
   return scorers.sort((a, b) => a.minute - b.minute);
 }
 
-function toPenaltyShootout(periods: OdfPeriod[]): { home: number; away: number } | undefined {
-  const pso = findPeriod(periods, "PSO");
-  if (!pso) return undefined;
-  // The shootout tally lives in periodScore — "score" stays the cumulative goal score (unaffected
-  // by the shootout), confirmed against a real Paris 2024 quarter-final that went to penalties.
-  return { home: Number(pso.home.periodScore ?? 0), away: Number(pso.away.periodScore ?? 0) };
-}
-
 export async function loadMatchDetail(unitId: string, home: MatchTeam, away: MatchTeam): Promise<MatchDetail> {
   const url = `${OG2024_BASE}/RES_ByRSC_H2H~comp=OG2024~disc=FBL~rscResult=${unitId}~lang=ENG.json`;
   const response = await fetchOdfJson<OdfMatchDetailResponse>(url);
-  const { periods, officials, extendedInfos, items } = response.results;
+  const { periods, items } = response.results;
 
   const homeItem = items.find((item) => item.teamCode === home.code);
   const awayItem = items.find((item) => item.teamCode === away.code);
   if (!homeItem || !awayItem) throw new Error(`Match ${unitId} is missing team result data`);
 
-  const attendanceValue = extendedInfos.find((info) => info.ei_code === "ATTENDANCE")?.ei_value;
-  const attendance = attendanceValue !== undefined ? Number(attendanceValue) : NaN;
-
   return {
     status: deriveStatus(periods),
     halfTime: periodScore(findPeriod(periods, "H1")),
     fullTime: periodScore(findPeriod(periods, "TOT")),
-    penaltyShootout: toPenaltyShootout(periods),
-    attendance: Number.isNaN(attendance) ? null : attendance,
-    referee: officials.find((official) => official.function.functionCode === "RE")?.official.name ?? null,
     scorers: toScorers(response, home.code),
     lineups: {
       home: toLineup(homeItem, home.name),

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { diffJson, type DiffEntry } from "@/lib/odf/diff";
-import { stripMeta } from "@/lib/odf/record";
+import { buildEndpoint } from "@/lib/odf/record";
 import { mapWithConcurrency } from "@/lib/server/concurrency";
+import { getSummaries } from "@/lib/server/matchCache";
 import { getOrGenerateRecord, MatchNotFoundError, ScheduleNotLoadedError } from "@/lib/server/records";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +22,6 @@ export type CompareResult =
 // Runs server-side deliberately — the tested API being reachable from *this server* (not from the
 // QA engineer's browser) is what makes this work regardless of whether that API has CORS enabled
 // for wherever this tool happens to be hosted, same reasoning as fetching Olympics server-side.
-//
-// "Expected" is the strict example.json shape (no `meta`), since that's the shape a real
-// FootyScores response is expected to have — comparing against our own traceability block would
-// never be a fair test.
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as CompareRequestBody;
   const baseUrl = body.baseUrl?.trim();
@@ -42,15 +39,18 @@ export async function POST(request: Request) {
   const results = await mapWithConcurrency(matchIds, CONCURRENCY, async (matchId): Promise<CompareResult> => {
     try {
       const record = await getOrGenerateRecord(matchId);
-      // Round-tripped through JSON, not just stripped: optional fields like scorer.stoppage/assist
-      // are set to the literal value `undefined` in the in-memory object (present-but-undefined),
+      const summary = getSummaries()?.find((candidate) => candidate.id === matchId);
+      if (!summary) return { matchId, status: "error", message: `No football match found for id "${matchId}"` };
+
+      // Round-tripped through JSON: optional fields like scorer.stoppage/assist are set to the
+      // literal value `undefined` in the in-memory object (present-but-undefined) when absent,
       // whereas `actual` below always comes from a real JSON response (`fetch().json()`), which can
       // never have an undefined-valued key — only present-with-a-value or absent. Diffing the raw
       // in-memory object against that would flag every omitted optional field as "missing" even
       // when the tested API is behaving correctly. This puts `expected` through the same lossy
       // JSON round-trip so both sides are judged purely as JSON values.
-      const expected = JSON.parse(JSON.stringify(stripMeta(record))) as unknown;
-      const url = `${trimmedBaseUrl}${record.meta.endpoint}`;
+      const expected = JSON.parse(JSON.stringify(record)) as unknown;
+      const url = `${trimmedBaseUrl}${buildEndpoint(summary)}`;
 
       let response: Response;
       try {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { buildMatchSlug, stripMeta } from "@/lib/odf/record";
+import { buildMatchSlug } from "@/lib/odf/record";
 import { getRecord, getSummaries } from "@/lib/server/matchCache";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +10,9 @@ export const dynamic = "force-dynamic";
 // reads what's already been generated (via the UI or an export), so it can't silently mask a slow
 // or failed upstream fetch as this endpoint's own behavior.
 //
-// The response body is exactly example.json's 8-key shape by default — no query param needed to
-// get the spec-compliant form, since that's what an automated comparison will hit unmodified. The
-// additive traceability fields (source event id, endpoint, attendance, referee, ...) are still
-// available two ways: always, via the X-Match-Meta response header (JSON-encoded); or in the body
-// too, for a human browsing this in a tab, via ?meta=true.
-export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+// The response body is exactly example.json's 8-key shape, always — nothing added.
+export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const includeMetaInBody = new URL(request.url).searchParams.get("meta") === "true";
 
   const summaries = getSummaries();
   if (!summaries) {
@@ -40,7 +35,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     );
   }
 
-  return NextResponse.json(includeMetaInBody ? record : stripMeta(record), {
-    headers: { "X-Match-Meta": JSON.stringify(record.meta) },
-  });
+  return NextResponse.json(record);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildEndpoint, buildMatchSlug, buildRecord, stripMeta } from "./record";
+import { buildEndpoint, buildMatchSlug, buildRecord } from "./record";
 import type { MatchDetail, MatchSummary } from "./types";
 
 const summary: MatchSummary = {
@@ -21,8 +21,6 @@ const detail: MatchDetail = {
   status: "FT",
   halfTime: { home: 0, away: 1 },
   fullTime: { home: 1, away: 2 },
-  attendance: 26717,
-  referee: "NYBERG Glenn",
   scorers: [
     { team: "away", player: "RAHIMI Soufiane", minute: 45, stoppage: 2, assist: "EL KHANNOUSS Bilal", type: "open_play" },
     { team: "away", player: "RAHIMI Soufiane", minute: 49, type: "penalty" },
@@ -90,32 +88,8 @@ describe("buildRecord", () => {
     expect(withStoppageAndAssist.assist).toBe("EL KHANNOUSS Bilal");
   });
 
-  it("puts source event id, endpoint, attendance and referee under meta", () => {
+  it("has exactly example.json's 8 keys — nothing added", () => {
     const record = buildRecord(summary, detail);
-    expect(record.meta).toEqual({
-      eventId: summary.id,
-      discipline: "Football",
-      gender: "Men",
-      endpoint: "/v1/football/matches/2024-07-24-argentina-vs-morocco",
-      sourceUrl: summary.sourceUrl,
-      attendance: 26717,
-      referee: "NYBERG Glenn",
-      penaltyShootout: undefined,
-    });
-  });
-});
-
-describe("stripMeta", () => {
-  it("removes exactly the meta key, keeping example.json's other 8 keys untouched", () => {
-    const record = buildRecord(summary, detail);
-    const stripped = stripMeta(record);
-    expect(Object.keys(stripped).sort()).toEqual(["competition", "kickoff", "lineups", "score", "scorers", "status", "teams", "venue"]);
-    expect(stripped).not.toHaveProperty("meta");
-  });
-
-  it("doesn't mutate the original record", () => {
-    const record = buildRecord(summary, detail);
-    stripMeta(record);
-    expect(record).toHaveProperty("meta");
+    expect(Object.keys(record).sort()).toEqual(["competition", "kickoff", "lineups", "score", "scorers", "status", "teams", "venue"]);
   });
 });

@@ -31,15 +31,6 @@ const record: FootballRecord = {
     home: { team: "Argentina", formation: "4-4-2", coach: "MASCHERANO Javier", startingXI: [], bench: [] },
     away: { team: "Morocco", formation: "4-2-3-1", coach: "SEKTIOUI Tarik", startingXI: [], bench: [] },
   },
-  meta: {
-    eventId: summary.id,
-    discipline: "Football",
-    gender: "Men",
-    endpoint: "/v1/football/matches/2024-07-24-argentina-vs-morocco",
-    sourceUrl: summary.sourceUrl,
-    attendance: 26717,
-    referee: "NYBERG Glenn",
-  },
 };
 
 // This module is a true process-lifetime singleton — reset it before every test so tests don't

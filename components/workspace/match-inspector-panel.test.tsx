@@ -21,15 +21,6 @@ const record: FootballRecord = {
     home: { team: "Argentina", formation: "4-4-2", coach: "MASCHERANO Javier", startingXI: [], bench: [] },
     away: { team: "Morocco", formation: "4-2-3-1", coach: "SEKTIOUI Tarik", startingXI: [], bench: [] },
   },
-  meta: {
-    eventId: "FBLMTEAM11------------GPB-000100--",
-    discipline: "Football",
-    gender: "Men",
-    endpoint: "/v1/football/matches/2024-07-24-argentina-vs-morocco",
-    sourceUrl: "https://stacy.olympics.com/en/paris-2024/results/football/men/gpb-000100--",
-    attendance: 26717,
-    referee: "NYBERG Glenn",
-  },
 };
 
 const baseProps = {
@@ -159,14 +150,13 @@ describe("MatchInspectorPanel", () => {
   });
 
   describe("Source data tab content", () => {
-    it("shows the strict (no meta) JSON when ready", () => {
+    it("shows the record JSON when ready", () => {
       render(<MatchInspectorPanel {...baseProps} inspector="data" detailEntry={{ status: "ready", record }} />);
       const pre = screen.getByText(/"competition"/).textContent!;
-      expect(pre).not.toContain('"meta"');
       expect(pre).toContain('"teams"');
     });
 
-    it("copies the strict JSON, not the raw record with meta", async () => {
+    it("copies the record JSON", async () => {
       const onCopy = vi.fn();
       const user = userEvent.setup();
       render(<MatchInspectorPanel {...baseProps} inspector="data" detailEntry={{ status: "ready", record }} onCopy={onCopy} />);
@@ -174,7 +164,7 @@ describe("MatchInspectorPanel", () => {
       await user.click(screen.getByRole("button", { name: /copy json/i }));
 
       const [copiedText] = onCopy.mock.calls[0] as [string, string];
-      expect(copiedText).not.toContain("meta");
+      expect(copiedText).toContain('"teams"');
     });
 
     it("shows the error message and a working retry button", async () => {

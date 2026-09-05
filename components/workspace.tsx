@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { diffJson } from "@/lib/odf/diff";
-import { buildEndpoint, stripMeta } from "@/lib/odf/record";
+import { buildEndpoint } from "@/lib/odf/record";
 import type { FootballRecord } from "@/lib/odf/record";
 import type { MatchSummary } from "@/lib/odf/types";
 
@@ -255,7 +255,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
 
     setExporting(true);
     try {
-      const records = (await Promise.all(targets.map((summary) => ensureDetail(summary)))).map(stripMeta);
+      const records = await Promise.all(targets.map((summary) => ensureDetail(summary)));
       const payload = { competition: "paris-2024", sport: "football", schema: "example.json", order: `${sort.field} ${sort.dir}`, generatedCount: records.length, matches: records };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -334,7 +334,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
       return;
     }
 
-    const diffs = diffJson(stripMeta(detailEntry.record), actual);
+    const diffs = diffJson(detailEntry.record, actual);
     setCompareResults((prev) => new Map(prev).set(selectedSummary.id, diffs.length === 0 ? { status: "pass" } : { status: "fail", diffs }));
     setCompareResultModalOpen(true);
     notify(diffs.length === 0 ? "Pasted JSON matches the generated reference" : `Pasted JSON differs in ${diffs.length} place${diffs.length === 1 ? "" : "s"}`);
