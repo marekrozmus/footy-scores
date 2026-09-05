@@ -165,7 +165,7 @@ export function MatchListPanel({
           </div>
         )}
       </div></div>
-      <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 md:hidden">
+      <div className="flex flex-col items-center justify-between gap-3 border-t border-border px-4 py-3 md:hidden">
         <p className="min-w-0 truncate text-xs text-muted-foreground">{filtered.length} of {dataReady ? rows.length : 0} records · {sort.field} {sort.dir}</p>
         <ExportCompareMenu
           variant="mobile"
