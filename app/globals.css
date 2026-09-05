@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ * The :root block defines the actual color values using oklch.
+ */
+
+@theme inline {
+  --font-display: var(--font-archivo), sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-signal-cyan: var(--signal-cyan);
+  --color-signal-gold: var(--signal-gold);
+  --color-signal-red: var(--signal-red);
+  --color-signal-green: var(--signal-green);
+  --container-workspace: 1480px;
+  /* Letter-spacing steps beyond the default tracking-widest (0.1em),
+     named by their em value x100 so the scale reads in order. */
+  --tracking-14: 0.14em;
+  --tracking-16: 0.16em;
+  --tracking-20: 0.2em;
+}
+
+:root {
+  --radius: 0.45rem;
+  --background: oklch(0.139 0.006 264);
+  --foreground: oklch(0.953 0.017 91);
+  --popover: oklch(0.2 0.01 264);
+  --primary: oklch(0.953 0.017 91);
+  --primary-foreground: oklch(0.139 0.006 264);
+  --muted-foreground: oklch(0.65 0.02 257);
+  --accent: oklch(0.785 0.155 78);
+  --accent-foreground: oklch(0.139 0.006 264);
+  --border: oklch(0.265 0.014 264);
+  --ring: oklch(0.785 0.155 78);
+  --panel: oklch(0.177 0.008 264);
+  --panel-raised: oklch(0.205 0.011 264);
+  --signal-cyan: oklch(0.774 0.128 205);
+  --signal-gold: oklch(0.785 0.155 78);
+  --signal-red: oklch(0.646 0.217 29);
+  --signal-green: oklch(0.79 0.16 154);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-mono);
+    margin: 0;
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.3 0.01 264) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.3 0.01 264);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.4 0.01 264);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  button,
+  select {
+    letter-spacing: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@utility animate-rise {
+  animation: rise 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Shared column templates for the match list and compare tables, so the
+   header row and body rows can't drift apart into two different literals. */
+@utility grid-match-row {
+  grid-template-columns: 72px 1fr 80px 96px 72px;
+}
+
+@utility grid-compare-row {
+  grid-template-columns: 90px 1fr 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise {
+    animation: none;
+  }
+}
