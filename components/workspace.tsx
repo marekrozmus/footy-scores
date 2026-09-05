@@ -240,10 +240,8 @@ export function Workspace({ brand }: { brand: ReactNode }) {
       .map((row) => summaryById.get(row.id))
       .filter((summary): summary is MatchSummary => Boolean(summary));
 
-    if (!targets.length) {
-      setExportOpen(false);
-      return;
-    }
+    setExportOpen(false);
+    if (!targets.length) return;
 
     setExporting(true);
     try {
@@ -261,7 +259,6 @@ export function Workspace({ brand }: { brand: ReactNode }) {
       notify("Export failed — one or more matches could not be loaded");
     } finally {
       setExporting(false);
-      setExportOpen(false);
     }
   };
 
@@ -269,13 +266,10 @@ export function Workspace({ brand }: { brand: ReactNode }) {
     const targetRows = scope === "all" ? rows : scope === "filtered" ? filtered : selected ? [selected] : [];
     const matchIds = targetRows.map((row) => row.id);
 
-    if (!matchIds.length) {
-      setCompareOpen(false);
-      return;
-    }
+    setCompareOpen(false);
+    if (!matchIds.length) return;
     if (!baseUrl.trim()) {
       notify("Enter a test API base URL first");
-      setCompareOpen(false);
       return;
     }
 
@@ -305,7 +299,6 @@ export function Workspace({ brand }: { brand: ReactNode }) {
       notify(error instanceof Error ? error.message : "Comparison failed");
     } finally {
       setComparing(false);
-      setCompareOpen(false);
     }
   };
 
