@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { Workspace } from "@/components/workspace";
+import { BrandHeader } from "@/components/workspace/brand-header";
 
 export const metadata: Metadata = {
   title: "FootyScores | Paris 2024 QA Workspace",
@@ -16,5 +17,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <Workspace />;
+  return <Workspace brand={<BrandHeader />} />;
 }
