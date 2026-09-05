@@ -1,5 +1,6 @@
 import { Button } from "@/components/button";
 import { AlertTriangle, Check, Clipboard, Copy, GitCompareArrows, LoaderCircle, RefreshCw, X } from "@/components/icons";
+import { stripMeta } from "@/lib/odf/record";
 
 import { ExportCompareMenu } from "./export-compare-menu";
 import { Flag } from "./flag";
@@ -128,10 +129,10 @@ export function MatchInspectorPanel({
             {inspector === "data" && <div role="tabpanel" className="flex h-full flex-col">
               <div className="mb-3 flex items-center justify-between px-4 pt-4">
                 <p className="text-xs uppercase tracking-16 text-muted-foreground">Parsed match record (example.json shape)</p>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={detailEntry?.status !== "ready"} onClick={() => { if (detailEntry?.status === "ready") onCopy(JSON.stringify(detailEntry.record, null, 2), "Record JSON copied"); }}><Copy />Copy JSON</Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={detailEntry?.status !== "ready"} onClick={() => { if (detailEntry?.status === "ready") onCopy(JSON.stringify(stripMeta(detailEntry.record), null, 2), "Record JSON copied"); }}><Copy />Copy JSON</Button>
               </div>
               {detailEntry?.status === "ready" ? (
-                <pre className="mx-4 flex-1 overflow-auto rounded-md border border-border bg-background p-3 text-xs leading-6 text-muted-foreground"><code>{JSON.stringify(detailEntry.record, null, 2)}</code></pre>
+                <pre className="mx-4 flex-1 overflow-auto rounded-md border border-border bg-background p-3 text-xs leading-6 text-muted-foreground"><code>{JSON.stringify(stripMeta(detailEntry.record), null, 2)}</code></pre>
               ) : detailEntry?.status === "error" ? (
                 <div className="mx-4 flex flex-1 flex-col items-center justify-center gap-2 rounded-md border border-signal-red/30 bg-signal-red/5 p-4 text-center text-xs text-signal-red">
                   <AlertTriangle className="size-5" />
