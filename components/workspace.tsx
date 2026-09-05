@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { diffJson } from "@/lib/odf/diff";
-import { buildEndpoint } from "@/lib/odf/record";
+import { buildEndpoint, buildMatchSlug } from "@/lib/odf/record";
 import type { FootballRecord } from "@/lib/odf/record";
 import type { MatchSummary } from "@/lib/odf/types";
 
@@ -261,7 +261,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `footyscores-paris2024-${scope}.json`;
+      link.download = scope === "one" && targets[0] ? `${buildMatchSlug(targets[0])}.json` : `footyscores-paris2024-${scope}.json`;
       link.click();
       URL.revokeObjectURL(url);
       notify(`Exported ${records.length} record${records.length === 1 ? "" : "s"} as JSON`);
