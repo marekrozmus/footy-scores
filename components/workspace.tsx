@@ -256,7 +256,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
     setExporting(true);
     try {
       const records = await Promise.all(targets.map((summary) => ensureDetail(summary)));
-      const payload = { competition: "paris-2024", sport: "football", schema: "example.json", order: `${sort.field} ${sort.dir}`, generatedCount: records.length, matches: records };
+      const payload = scope === "one" ? records[0] : records;
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
