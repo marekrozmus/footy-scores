@@ -38,7 +38,7 @@ export function ExportCompareMenu({
 }) {
   const minHeight = variant === "mobile" ? "min-h-11" : "min-h-10";
   const zIndex = variant === "mobile" ? "z-30" : "z-10";
-  const itemClasses = variant === "mobile" ? "cursor-pointer py-3 text-sm" : "py-3 text-xs";
+  const itemClasses = variant === "mobile" ? "py-3 text-sm" : "py-3 text-xs";
 
   return (
     <div className="relative flex shrink-0 items-center gap-2 ml-auto">
@@ -50,7 +50,7 @@ export function ExportCompareMenu({
       {compareOpen && (
         <div className={`absolute bottom-full left-0 ${zIndex} mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg`}>
           {SCOPE_LABELS.map(([scope, label]) => (
-            <button key={scope} onClick={() => onCompare(scope)} className={`block w-full px-3 ${itemClasses} text-left hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}>
+            <button key={scope} onClick={() => onCompare(scope)} className={`block w-full cursor-pointer px-3 ${itemClasses} text-left transition-colors hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}>
               {label(totalCount, filteredCount)}
             </button>
           ))}
@@ -64,7 +64,7 @@ export function ExportCompareMenu({
       {exportOpen && (
         <div className={`absolute bottom-full right-0 ${zIndex} mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg`}>
           {SCOPE_LABELS.map(([scope, label]) => (
-            <button key={scope} onClick={() => onExport(scope)} className={`block w-full px-3 ${itemClasses} text-left hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}>
+            <button key={scope} onClick={() => onExport(scope)} className={`block w-full cursor-pointer px-3 ${itemClasses} text-left transition-colors hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}>
               {label(totalCount, filteredCount)}
             </button>
           ))}

@@ -5,6 +5,8 @@ import { FilterSelect } from "./filter-select";
 import type { SortField, SortState } from "./types";
 import { sortFieldLabels } from "./utils";
 
+const SORT_FIELDS: readonly SortField[] = ["kickoff", "match", "score", "stage", "gender"];
+
 export function MatchFilters({
   gender,
   onGenderChange,
@@ -73,19 +75,22 @@ export function MatchFilters({
               <h3 className="font-display text-sm font-bold uppercase">Filters &amp; sorting</h3>
               <Button variant="ghost" size="sm" className="min-h-11 px-3 text-xs" onClick={() => onFiltersOpenChange(false)}><X />Close</Button>
             </div>
-            <div className="mt-3 grid gap-2 [&_label]:min-h-12 [&_label]:w-full [&_select]:ml-auto [&_select]:text-sm">
-              <FilterSelect label="Gender" value={gender} options={["All", "Men", "Women"]} onChange={onGenderChange} />
-              <FilterSelect label="Stage" value={stage} options={stages} onChange={onStageChange} />
-              <FilterSelect label="Team" value={team} options={teams} onChange={onTeamChange} />
-              <div className="flex min-h-12 items-center gap-2 rounded-md border border-border bg-panel px-3">
-                <label className="relative flex flex-1 cursor-pointer items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Sort by</span>
-                  <select className="cursor-pointer appearance-none bg-transparent pr-5 text-sm font-medium text-foreground outline-none" value={sort.field} onChange={(event) => onSortChange({ field: event.target.value as SortField, dir: sort.dir })}>
-                    {(["kickoff", "match", "score", "stage", "gender"] as const).map((field) => <option key={field} className="bg-popover capitalize" value={field}>{sortFieldLabels[field]}</option>)}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-0 size-3.5 text-muted-foreground" />
-                </label>
-                <button type="button" onClick={() => onSortChange({ field: sort.field, dir: sort.dir === "asc" ? "desc" : "asc" })} className="flex min-h-8 cursor-pointer items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium uppercase text-foreground hover:bg-panel-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <div className="mt-3 grid gap-2">
+              <FilterSelect label="Gender" value={gender} options={["All", "Men", "Women"]} onChange={onGenderChange} className="min-h-12" />
+              <FilterSelect label="Stage" value={stage} options={stages} onChange={onStageChange} className="min-h-12" />
+              <FilterSelect label="Team" value={team} options={teams} onChange={onTeamChange} className="min-h-12" />
+              <div className="flex items-center gap-2">
+                <FilterSelect
+                  label="Sort by"
+                  value={sortFieldLabels[sort.field]}
+                  options={SORT_FIELDS.map((field) => sortFieldLabels[field])}
+                  onChange={(label) => {
+                    const field = SORT_FIELDS.find((candidate) => sortFieldLabels[candidate] === label) ?? sort.field;
+                    onSortChange({ field, dir: sort.dir });
+                  }}
+                  className="min-h-12 flex-1"
+                />
+                <button type="button" onClick={() => onSortChange({ field: sort.field, dir: sort.dir === "asc" ? "desc" : "asc" })} className="flex min-h-12 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border px-3 text-xs font-medium uppercase text-foreground transition-colors hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {sort.dir === "asc" ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}{sort.dir}
                 </button>
               </div>
