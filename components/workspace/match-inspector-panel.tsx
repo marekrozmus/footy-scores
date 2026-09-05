@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { Button } from "@/components/button";
 import { AlertTriangle, Check, Clipboard, Copy, GitCompareArrows, LoaderCircle, RefreshCw, X } from "@/components/icons";
 import { stripMeta } from "@/lib/odf/record";
@@ -13,6 +15,22 @@ const TABS: readonly (readonly [InspectorTab, string])[] = [
   ["data", "Source data"],
   ["compare", "Compare"],
 ];
+
+// Only ever rendered by the parent while the thing it's gating is actually happening (see the
+// `showDetailLoading &&` call site below), so "reset" is just "this instance gets unmounted" —
+// no synchronous setState-on-deactivate needed, `setShown` only ever fires from the timer
+// callback itself. Mount a fresh instance per match via `key` so a quick match A -> match B
+// switch (both loading) restarts the delay instead of inheriting A's elapsed time.
+function DelayedAppear({ delayMs, children }: { delayMs: number; children: React.ReactNode }) {
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShown(true), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [delayMs]);
+
+  return shown ? children : null;
+}
 
 export function MatchInspectorPanel({
   sheetOpen,
@@ -40,6 +58,7 @@ export function MatchInspectorPanel({
   onToggleExport,
   onCompare,
   onExport,
+  selectedReady,
 }: {
   sheetOpen: boolean;
   onSheetOpenChange: (open: boolean) => void;
@@ -66,7 +85,12 @@ export function MatchInspectorPanel({
   onToggleExport: () => void;
   onCompare: (scope: ExportScope) => void;
   onExport: (scope: ExportScope) => void;
+  selectedReady: boolean;
 }) {
+  // Disabled (not just visually) while there's genuinely nothing to show yet — but not on error,
+  // since that's exactly where the retry action lives, and not on "ready", obviously.
+  const sourceTabDisabled = detailEntry === undefined || detailEntry.status === "loading";
+
   return (
     <section
       aria-label="Match inspector"
@@ -78,15 +102,31 @@ export function MatchInspectorPanel({
           <p className="truncate text-xs text-muted-foreground">{selected ? `${selected.date} · ${selected.time} local` : "—"}</p>
         </div>
         <div className="hidden min-w-0 gap-1 md:flex" role="tablist" aria-label="Match inspector">
-          {TABS.map(([value, label]) => <Button key={value} variant={inspector === value ? "console" : "ghost"} size="sm" role="tab" aria-selected={inspector === value} onClick={() => onInspectorChange(value)} className="min-h-10 px-3 text-xs">{value === "compare" && <GitCompareArrows />}{label}</Button>)}
+          {TABS.map(([value, label]) => <Button key={value} variant={inspector === value ? "console" : "ghost"} size="sm" role="tab" aria-selected={inspector === value} disabled={value === "data" && sourceTabDisabled} onClick={() => onInspectorChange(value)} className="min-h-10 px-3 text-xs">{value === "compare" && <GitCompareArrows />}{label}</Button>)}
         </div>
         <span className="hidden truncate text-xs text-muted-foreground xl:inline">{selected?.id ?? "—"}</span>
         <Button variant="ghost" size="sm" className="min-h-11 shrink-0 px-3 text-xs md:hidden" onClick={() => onSheetOpenChange(false)}><X />Close</Button>
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 md:hidden" role="tablist" aria-label="Match inspector sections">
-        {TABS.map(([value, label]) => <Button key={value} variant={inspector === value ? "console" : "ghost"} size="sm" role="tab" aria-selected={inspector === value} onClick={() => onInspectorChange(value)} className="min-h-11 shrink-0 px-3 text-xs">{value === "compare" && <GitCompareArrows />}{label}</Button>)}
+        {TABS.map(([value, label]) => <Button key={value} variant={inspector === value ? "console" : "ghost"} size="sm" role="tab" aria-selected={inspector === value} disabled={value === "data" && sourceTabDisabled} onClick={() => onInspectorChange(value)} className="min-h-11 shrink-0 px-3 text-xs">{value === "compare" && <GitCompareArrows />}{label}</Button>)}
       </div>
+
+      {detailEntry?.status === "loading" && (
+        <DelayedAppear key={selected?.id} delayMs={300}>
+          <div className="flex items-center gap-2 border-b border-border bg-panel px-4 py-2 text-xs text-muted-foreground" aria-live="polite">
+            <LoaderCircle className="size-3.5 animate-spin text-signal-cyan" />
+            Loading match detail…
+          </div>
+        </DelayedAppear>
+      )}
+
+      {detailEntry?.status === "error" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-signal-red/5 px-4 py-2 text-xs text-signal-red" role="alert">
+          <span className="flex min-w-0 items-center gap-2"><AlertTriangle className="size-3.5 shrink-0" /><span className="break-all">Failed to load match detail: {detailEntry.message}</span></span>
+          <Button variant="consoleOutline" size="sm" className="h-7 shrink-0 text-xs" onClick={onRetryDetail}><RefreshCw />Retry</Button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto">
         {!selected ? <div className="flex-1 grid place-items-center px-6 text-center text-sm text-muted-foreground">Select a match to inspect its generated endpoint.</div> : (
@@ -150,8 +190,12 @@ export function MatchInspectorPanel({
                   Test API base URL
                   <input className="mt-2 min-h-10 w-full rounded-md border border-border bg-panel px-3 text-xs text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring" value={baseUrl} onChange={(event) => onBaseUrlChange(event.target.value)} />
                 </label>
-                <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" onClick={onCompareSelected} disabled={comparing}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Compare this match"}</Button>
-                <p className="mt-2 text-xs text-muted-foreground">Need every match at once? Use the <b className="text-foreground">Compare</b> button next to Export JSON instead.</p>
+                <Button variant="consoleOutline" className="mt-3 min-h-10 w-full text-xs" onClick={onCompareSelected} disabled={comparing || detailEntry?.status !== "ready"}>{comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}{comparing ? "Comparing…" : "Compare this match"}</Button>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {detailEntry?.status === "loading"
+                    ? "Waiting for match detail to finish loading…"
+                    : <>Need every match at once? Use the <b className="text-foreground">Compare</b> button next to Export JSON instead.</>}
+                </p>
               </div>
               {!compareResult ? (
                 <div className="mt-3 flex items-start gap-2 rounded-md border border-signal-gold/30 bg-signal-gold/5 p-3 text-xs text-muted-foreground">
@@ -204,6 +248,7 @@ export function MatchInspectorPanel({
           onToggleExport={onToggleExport}
           onCompare={onCompare}
           onExport={onExport}
+          selectedReady={selectedReady}
         />
       </div>
     </section>

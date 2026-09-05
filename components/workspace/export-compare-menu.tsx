@@ -22,6 +22,7 @@ export function ExportCompareMenu({
   onToggleExport,
   onCompare,
   onExport,
+  selectedReady,
 }: {
   variant: "mobile" | "desktop";
   totalCount: number;
@@ -35,6 +36,7 @@ export function ExportCompareMenu({
   onToggleExport: () => void;
   onCompare: (scope: ExportScope) => void;
   onExport: (scope: ExportScope) => void;
+  selectedReady: boolean;
 }) {
   const minHeight = variant === "mobile" ? "min-h-11" : "min-h-10";
   const zIndex = variant === "mobile" ? "z-30" : "z-10";
@@ -49,11 +51,14 @@ export function ExportCompareMenu({
       </Button>
       {compareOpen && (
         <div className={`absolute bottom-full left-0 ${zIndex} mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg`}>
-          {SCOPE_LABELS.map(([scope, label]) => (
-            <button key={scope} onClick={() => onCompare(scope)} className={`block w-full cursor-pointer px-3 ${itemClasses} text-left transition-colors hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}>
-              {label(totalCount, filteredCount)}
-            </button>
-          ))}
+          {SCOPE_LABELS.map(([scope, label]) => {
+            const disabled = scope === "one" && !selectedReady;
+            return (
+              <button key={scope} onClick={() => onCompare(scope)} disabled={disabled} className={`block w-full px-3 ${itemClasses} text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${disabled ? "cursor-not-allowed text-muted-foreground/50" : "cursor-pointer hover:bg-border"}`}>
+                {label(totalCount, filteredCount)}
+              </button>
+            );
+          })}
         </div>
       )}
       <Button variant="console" size="sm" className={`${minHeight} text-xs`} onClick={onToggleExport} aria-expanded={exportOpen} disabled={!dataReady || exporting}>
@@ -63,11 +68,14 @@ export function ExportCompareMenu({
       </Button>
       {exportOpen && (
         <div className={`absolute bottom-full right-0 ${zIndex} mb-2 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg`}>
-          {SCOPE_LABELS.map(([scope, label]) => (
-            <button key={scope} onClick={() => onExport(scope)} className={`block w-full cursor-pointer px-3 ${itemClasses} text-left transition-colors hover:bg-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}>
-              {label(totalCount, filteredCount)}
-            </button>
-          ))}
+          {SCOPE_LABELS.map(([scope, label]) => {
+            const disabled = scope === "one" && !selectedReady;
+            return (
+              <button key={scope} onClick={() => onExport(scope)} disabled={disabled} className={`block w-full px-3 ${itemClasses} text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${disabled ? "cursor-not-allowed text-muted-foreground/50" : "cursor-pointer hover:bg-border"}`}>
+                {label(totalCount, filteredCount)}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

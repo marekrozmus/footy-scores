@@ -45,6 +45,7 @@ export function MatchListPanel({
   onToggleExport,
   onCompare,
   onExport,
+  selectedReady,
 }: {
   leftWidth: number;
   phase: Phase;
@@ -81,6 +82,7 @@ export function MatchListPanel({
   onToggleExport: () => void;
   onCompare: (scope: ExportScope) => void;
   onExport: (scope: ExportScope) => void;
+  selectedReady: boolean;
 }) {
   return (
     <section className="animate-rise flex w-full min-w-0 flex-none flex-col overflow-hidden rounded-md border border-border bg-panel [animation-delay:120ms] md:w-[var(--left-pane)] md:rounded-l-md md:rounded-r-none md:border-r-0" style={{ ["--left-pane" as string]: `${leftWidth}%` } as CSSProperties}>
@@ -147,11 +149,16 @@ export function MatchListPanel({
           </div>
         ) : phase === "idle" ? (
           <div className="grid min-h-64 place-items-center px-6 text-center text-sm text-muted-foreground">
-            <div>
+            <button
+              type="button"
+              aria-label="Load & generate"
+              onClick={onRun}
+              className="cursor-pointer rounded-md p-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <Play className="mx-auto mb-2 size-6" />
               No run yet<br />
-              <span className="text-xs">Press Load &amp; generate to fetch the official Paris 2024 schedule and build the reference endpoints.</span>
-            </div>
+              <span className="text-xs">Click to fetch the official Paris 2024 schedule and build the reference endpoints.</span>
+            </button>
           </div>
         ) : filtered.length ? filtered.map((row) => (
           <MatchRow key={row.id} row={row} selected={selected?.id === row.id} onSelect={() => onSelectRow(row.id)} />
@@ -180,6 +187,7 @@ export function MatchListPanel({
           onToggleExport={onToggleExport}
           onCompare={onCompare}
           onExport={onExport}
+          selectedReady={selectedReady}
         />
       </div>
     </section>

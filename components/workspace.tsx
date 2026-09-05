@@ -186,6 +186,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
   const selectedSummary = selected ? summaryById.get(selected.id) : undefined;
   const endpoint = selectedSummary ? buildEndpoint(selectedSummary) : "";
   const detailEntry = selectedSummary ? details.get(selectedSummary.id) : undefined;
+  const selectedReady = detailEntry?.status === "ready";
 
   const ensureDetail = useCallback((summary: MatchSummary): Promise<FootballRecord> => {
     const cached = detailRequests.current.get(summary.id);
@@ -381,6 +382,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
               onToggleExport={() => { setCompareOpen(false); setExportOpen((open) => !open); }}
               onCompare={runCompare}
               onExport={exportJson}
+              selectedReady={selectedReady}
             />
 
             <div
@@ -425,6 +427,7 @@ export function Workspace({ brand }: { brand: ReactNode }) {
               onToggleExport={() => { setCompareOpen(false); setExportOpen((open) => !open); }}
               onCompare={runCompare}
               onExport={exportJson}
+              selectedReady={selectedReady}
             />
           </div>
         </div>
