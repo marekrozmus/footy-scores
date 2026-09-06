@@ -2,6 +2,10 @@
 
 Paris 2024 football API endpoint reference tool for QA engineers — filter and sort match data, then generate and export the corresponding API endpoint references.
 
+**Live demo:** https://footy-scores-rouge.vercel.app/
+
+**Author:** Marek Rozmus
+
 ## How this app was built
 
 - **Lovable** — initial UI design, tuned there directly (moving/removing

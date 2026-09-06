@@ -2,6 +2,8 @@
   "name": "footyscores-nextjs",
   "private": true,
   "type": "module",
+  "author": "Marek Rozmus",
+  "homepage": "https://footy-scores-rouge.vercel.app/",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
