@@ -2,14 +2,39 @@
 
 Paris 2024 football API endpoint reference tool for QA engineers — filter and sort match data, then generate and export the corresponding API endpoint references.
 
+## How this app was built
+
+- **Lovable** — initial UI design, tuned there directly (moving/removing
+  elements, UX fixes), producing a TanStack app.
+- **Claude Code** — rewrote the TanStack app into this Next.js app.
+- **Browser DevTools (Network tab)** — inspected the Olympics schedule page
+  to find the actual requests it makes to fetch data.
+- **Claude** — analyzed those captured requests/responses to work out the
+  response structure and plan how to pull real data from the page. Documented
+  in [`docs/DATA_PIPELINE_PLAN.md`](docs/DATA_PIPELINE_PLAN.md).
+- **Claude Code** — finished the app: bug fixes, inconsistency fixes, and UX
+  polish.
+- **ChatGPT** — app icon design.
+
+The TanStack → Next.js rewrite itself is documented in
+[`docs/MIGRATION.md`](docs/MIGRATION.md).
+
 ## Running it
 
+Uses the Node version pinned in `.nvmrc` — run `nvm use` first if you have
+nvm installed.
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000).
+
+Use `npm ci` for a fresh clone or after pulling — it installs exactly what's
+in `package-lock.json` and fails if the lockfile is out of sync. Use
+`npm install` only when you're intentionally adding or upgrading a
+dependency.
 
 Other scripts:
 
@@ -17,9 +42,14 @@ Other scripts:
 npm run build      # production build
 npm run start      # run the production build
 npm run lint       # lint the codebase
+npm run typecheck  # type-check the codebase
 npm test           # run the unit test suite once
 npm run test:watch # run the unit test suite in watch mode
 ```
+
+`npm ci`/`npm install` also sets up Husky git hooks (via the `prepare`
+script): `pre-commit` runs typecheck + lint, `pre-push` additionally runs the
+test suite.
 
 ## How it works
 
